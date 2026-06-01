@@ -47,7 +47,12 @@ extra map words on the right). `Xxx` is any of the eight namespaces.
 | `t Xxx.keys`                  | all keys, sorted |
 | `t Xxx.values` / `Xxx.entries` *(map)* | all values / `[key, value]` pairs |
 | `t Xxx.size` / `Xxx.height`   | key count / structural depth |
+| `keys Xxx.from-keys` *(set)* / `entries Xxx.from-entries` *(map)* | rebuild a trie from extracted data (inverse of `keys`/`entries`) |
 | `t Xxx.encode`                | jsonic-style snapshot string |
+
+The standard trie additionally offers two **advanced queries**:
+`t query k TrieSet.within` (fuzzy / edit-distance search) and
+`t pattern TrieSet.match` (wildcard search, `?` = one char, `*` = any run).
 
 Tries are **persistent (immutable)**: every `add`/`set`/`delete` returns
 a *new* trie and leaves the input untouched. Every call ends with `end`
@@ -81,6 +86,7 @@ test/<variant>_test.aql       example-based unit tests
 test/<variant>_prop_spec.aql  property-based tests (declarative spec form)
 test/trie_pbt.aql             property-based tests (direct test.check-prop form)
 docs/                     Diátaxis documentation (above)
+DX-REPORT.md              developer-experience notes on building this in AQL
 ```
 
 ## Running it

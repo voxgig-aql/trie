@@ -250,6 +250,136 @@ def encode-set fn [
 ]
 
 
+# --- advanced queries: fuzzy (edit distance) ------------------------
+#
+# Walk the trie carrying one row of the Levenshtein dynamic-programming
+# matrix between the path-so-far and the query, pruning a subtree as soon
+# as the whole row exceeds the distance budget `k` (Hanov's algorithm).
+
+def min3 fn [
+  [a:Integer b:Integer c:Integer] [Integer] [
+    def m (if (a lt b) [a] [b]) if (m lt c) [m] [c]
+  ]
+]
+
+def list-min fn [
+  [xs:List] [Integer] [
+    (xs get 0) xs [ var [[x acc] if (x lt acc) [x] [acc] ] ] fold
+  ]
+]
+
+# The next DP row for `letter` against `query`, given the parent row `prow`.
+# Call: `letter query prow build-row`.
+def build-row fn [
+  [prow:List query:String letter:String] [List] [
+    def cols ((query size) 1 add)
+    def row0 [ ((prow get 0) 1 add) ]
+    row0 (range 1 cols) [
+      var [[i row]
+        def insc ((row  get ((i 1 sub))) 1 add)
+        def delc ((prow get (i))         1 add)
+        def qc   (query slice (i 1 sub) i)
+        def repc ((prow get ((i 1 sub))) (if (qc letter eq) [0] [1]) add)
+        row (insc delc repc min3) push
+      ]
+    ] fold
+  ]
+]
+
+# Collect keys within distance `k`, descending children and updating rows.
+# Call: `acc prefix prow k query node fuzzy-go`.
+def fuzzy-go fn [
+  [node:Map query:String k:Integer prow:List prefix:String acc:List] [List] [
+    acc (node "kids" get) [
+      var [[pair a]
+        def c     (pair get 0)
+        def child (pair get 1)
+        def row   (c query prow build-row)
+        def np    ([prefix c] concat)
+        def last  (row get ((query size)))
+        def a1 (if ((child "end" get) and (last lte k)) [a np push] [a])
+        if ((row list-min) lte k) [ (a1 np row k query child fuzzy-go) ] [a1]
+      ]
+    ] fold
+  ]
+]
+
+# Every key within Levenshtein distance `k` of `query`, sorted.
+# Call: `node query k trie-within`.
+def trie-within fn [
+  [k:Integer query:String node:Map] [List] [
+    def row0 (iota ((query size) 1 add))
+    def base (if ((node "end" get) and ((query size) lte k)) [ [] "" push ] [[]])
+    (base "" row0 k query node fuzzy-go) sort
+  ]
+]
+
+
+# --- advanced queries: wildcard match -------------------------------
+#
+# Match keys against a pattern where `?` is any single character, `*` is
+# any run of characters (including none), and every other character is a
+# literal.
+
+def match-go fn [
+  [node:Map pattern:String prefix:String acc:List] [List] [
+    if ((pattern size) eq 0) [
+      if (node "end" get) [acc prefix push] [acc]
+    ] [
+      def p0    (pattern slice 0 1)
+      def prest (pattern slice 1 (pattern size))
+      if (p0 "?" eq) [
+        acc (node "kids" get) [
+          var [[pair a]
+            def np ([prefix (pair get 0)] concat)
+            (a np prest (pair get 1) match-go)
+          ]
+        ] fold
+      ] [
+        if (p0 "*" eq) [
+          def acc0 (acc prefix prest node match-go)
+          acc0 (node "kids" get) [
+            var [[pair a]
+              def np ([prefix (pair get 0)] concat)
+              (a np pattern (pair get 1) match-go)
+            ]
+          ] fold
+        ] [
+          def child (node p0 find-kid)
+          if (child eq none) [acc] [
+            def np ([prefix p0] concat)
+            (acc np prest child match-go)
+          ]
+        ]
+      ]
+    ]
+  ]
+]
+
+# Every key matching the wildcard `pattern`, sorted. Call: `node pattern trie-match`.
+def trie-match fn [
+  [pattern:String node:Map] [List] [ ([] "" pattern node match-go) sort ]
+]
+
+
+# --- construction from data -----------------------------------------
+
+# Build a trie from a list of keys (the inverse of `keys`). Call: `keys build-from-keys`.
+def build-from-keys fn [
+  [keys:List] [Map] [
+    empty-node keys [ var [[k acc] (acc k true trie-insert) ] ] fold
+  ]
+]
+
+# Build a trie from a list of [key, value] pairs (the inverse of `entries`).
+# Call: `entries build-from-entries`.
+def build-from-entries fn [
+  [entries:List] [Map] [
+    empty-node entries [ var [[e acc] (acc (e get 0) (e get 1) trie-insert) ] ] fold
+  ]
+]
+
+
 # --- TrieMap surface ------------------------------------------------
 #
 # Signatures are written in reverse of the call order (the AQL rule that the
@@ -319,6 +449,15 @@ def map-longest-prefix fn [
   [key:String t:Map] [Any] [ t key "" none longest ]
 ]
 
+# Keys within Levenshtein distance `k` of `query`, sorted.
+def map-within fn [ [k:Integer query:String t:Map] [List] [ t query k trie-within ] ]
+
+# Keys matching a `?`/`*` wildcard pattern, sorted.
+def map-match fn [ [pattern:String t:Map] [List] [ t pattern trie-match ] ]
+
+# Rebuild a map from a list of [key, value] pairs (inverse of `entries`).
+def map-from-entries fn [ [entries:List] [Map] [ entries build-from-entries ] ]
+
 def map-encode fn [ [t:Map] [String] [ t encode-map ] ]
 
 
@@ -360,6 +499,15 @@ def set-longest-prefix fn [
   [key:String t:Map] [Any] [ t key "" none longest ]
 ]
 
+# Keys within Levenshtein distance `k` of `query`, sorted.
+def set-within fn [ [k:Integer query:String t:Map] [List] [ t query k trie-within ] ]
+
+# Keys matching a `?`/`*` wildcard pattern, sorted.
+def set-match fn [ [pattern:String t:Map] [List] [ t pattern trie-match ] ]
+
+# Rebuild a set from a list of keys (inverse of `keys`).
+def set-from-keys fn [ [keys:List] [Map] [ keys build-from-keys ] ]
+
 def set-encode fn [ [t:Map] [String] [ t encode-set ] ]
 
 
@@ -379,6 +527,9 @@ export "TrieMap" {
   keys-with-prefix:    map-keys-with-prefix/r
   entries-with-prefix: map-entries-with-prefix/r
   longest-prefix:      map-longest-prefix/r
+  within:              map-within/r
+  match:               map-match/r
+  from-entries:        map-from-entries/r
   encode:              map-encode/r
 }
 
@@ -392,5 +543,8 @@ export "TrieSet" {
   height:         set-height/r
   with-prefix:    set-with-prefix/r
   longest-prefix: set-longest-prefix/r
+  within:         set-within/r
+  match:          set-match/r
+  from-keys:      set-from-keys/r
   encode:         set-encode/r
 }

@@ -153,6 +153,19 @@ def fixture fn [
 ] "radix-set" test.test end
 
 
+# --- construction from data (round-trips keys / entries) ------------
+
+[
+  def t ((((RadixSet.make end) "b" RadixSet.add end) "a" RadixSet.add end) "ab" RadixSet.add end)
+  def t2 ((t RadixSet.keys end) RadixSet.from-keys end)
+  (t RadixSet.keys end) (t2 RadixSet.keys end) assert.equal end
+  def m (((RadixMap.make end) "x" 1 RadixMap.set end) "y" "do" RadixMap.set end)
+  def m2 ((m RadixMap.entries end) RadixMap.from-entries end)
+  (m RadixMap.entries end) (m2 RadixMap.entries end) assert.equal end
+  "do" (m2 "y" RadixMap.get end) assert.equal end
+] "radixset-from-data" test.test end
+
+
 # --- summary -------------------------------------------------------
 
 "---" print

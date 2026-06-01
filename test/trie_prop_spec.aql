@@ -47,6 +47,22 @@ def all-have-prefix fn [
   ]
 ]
 
+# Element-wise list equality (AQL's `eq` on lists is identity, not deep).
+def list-eq fn [
+  [a:List b:List] [Boolean] [
+    if (((a size) (b size) eq) not) [false] [
+      true (iota (a size)) [ var [[i acc] acc ((a get (i)) (b get (i)) eq) and ] ] fold
+    ]
+  ]
+]
+
+# Are all members of `xs` present in set `s`? Call: `xs s all-members`.
+def all-members fn [
+  [s:Map xs:List] [Boolean] [
+    (xs each [ var [[x] s x TrieSet.has end ] ]) all end
+  ]
+]
+
 
 def report fn [
   [res:Map] [] [
@@ -124,6 +140,45 @@ def specs [
         def gone ((s2 k TrieSet.has end) not)
         def smaller ((s2 TrieSet.size end) (before 1 sub) eq)
         gone smaller and
+    ] ])
+
+  # 8. fuzzy soundness: every key returned by `within` is a real member.
+  #    The query is an actual key, so the result is never empty.
+  (test.prop "within-subset"
+    [ r.list-of [ r.string charset (r.int 1 6) ] (r.int 1 12) ]
+    [ var [[keys]
+        def s (keys set-of)
+        def hits (s (keys get 0) 2 TrieSet.within end)
+        hits s all-members
+    ] ])
+
+  # 9. within 0 of a stored key is exactly that key.
+  (test.prop "within-zero-is-exact"
+    [ r.list-of [ r.string charset (r.int 1 6) ] (r.int 1 12) ]
+    [ var [[keys]
+        def s (keys set-of)
+        def q (keys get 0)
+        def z (s q 0 TrieSet.within end)
+        z ([] q push) list-eq
+    ] ])
+
+  # 10. wildcard soundness: every key matching a pattern is a real member.
+  (test.prop "match-subset"
+    [ r.list-of [ r.string charset (r.int 1 6) ] (r.int 1 12) ]
+    [ var [[keys]
+        def s (keys set-of)
+        def pat ([ (keys get 0) "*" ] concat)
+        def hits (s pat TrieSet.match end)
+        hits s all-members
+    ] ])
+
+  # 11. from-keys round-trips: rebuilding from extracted keys is identical.
+  (test.prop "from-keys-roundtrip"
+    [ r.list-of [ r.string charset (r.int 1 6) ] (r.int 1 12) ]
+    [ var [[keys]
+        def viaadd  ((keys set-of) TrieSet.keys end)
+        def viafrom ((keys TrieSet.from-keys end) TrieSet.keys end)
+        viaadd viafrom list-eq
     ] ])
 
 ]

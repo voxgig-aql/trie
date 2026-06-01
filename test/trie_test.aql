@@ -161,6 +161,53 @@ def fixture fn [
 ] "set-delete" test.test end
 
 
+# --- fuzzy (edit distance) search -----------------------------------
+
+[
+  def t ((((((( TrieSet.make end)
+    "cat" TrieSet.add end) "car" TrieSet.add end) "card" TrieSet.add end)
+    "cab" TrieSet.add end) "dog" TrieSet.add end) "cart" TrieSet.add end)
+  # within 1 of "cat": cat(0), car(1), cab(1), cart(1) — NOT card(2), NOT dog
+  ["cab" "car" "cart" "cat"] (t "cat" 1 TrieSet.within end) assert.equal end
+  # within 0 is exact match only
+  ["car"] (t "car" 0 TrieSet.within end) assert.equal end
+  # nothing close to a far query
+  [] (t "zzzz" 1 TrieSet.within end) assert.equal end
+  # the empty key counts: distance from "" to a 1-char query is 1
+  def s ((TrieSet.make end) "" TrieSet.add end)
+  [""] (s "x" 1 TrieSet.within end) assert.equal end
+] "set-within" test.test end
+
+
+# --- wildcard match -------------------------------------------------
+
+[
+  def t ((((( TrieSet.make end)
+    "cat" TrieSet.add end) "car" TrieSet.add end) "card" TrieSet.add end)
+    "dog" TrieSet.add end)
+  ["car" "cat"]        (t "ca?" TrieSet.match end) assert.equal end
+  ["car" "card" "cat"] (t "ca*" TrieSet.match end) assert.equal end
+  ["card"]             (t "c?rd" TrieSet.match end) assert.equal end
+  ["car" "card" "cat" "dog"] (t "*" TrieSet.match end) assert.equal end
+  ["card"]             (t "*d" TrieSet.match end) assert.equal end
+] "set-match" test.test end
+
+
+# --- construction from data (round-trips keys / entries) ------------
+
+[
+  def t ((((TrieSet.make end) "b" TrieSet.add end) "a" TrieSet.add end) "ab" TrieSet.add end)
+  def t2 ((t TrieSet.keys end) TrieSet.from-keys end)
+  (t TrieSet.keys end) (t2 TrieSet.keys end) assert.equal end
+  3 (t2 TrieSet.size end) assert.equal end
+
+  def m (((TrieMap.make end) "x" 1 TrieMap.set end) "y" 2 TrieMap.set end)
+  def m2 ((m TrieMap.entries end) TrieMap.from-entries end)
+  (m TrieMap.entries end) (m2 TrieMap.entries end) assert.equal end
+  1 (m2 "x" TrieMap.get end) assert.equal end
+] "from-data" test.test end
+
+
 # --- summary -------------------------------------------------------
 
 "---" print

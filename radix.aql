@@ -370,6 +370,13 @@ def map-entries-with-prefix fn [
 
 def map-longest-prefix fn [ [key:String t:Map] [Any] [ none "" key t longest-r ] ]
 
+# Rebuild a map from a list of [key, value] pairs (inverse of `entries`).
+def map-from-entries fn [
+  [entries:List] [Map] [
+    empty-node entries [ var [[e acc] (acc (e get 0) (e get 1) radix-insert) ] ] fold
+  ]
+]
+
 def map-encode fn [
   [t:Map] [String] [
     def ks (([] "" t collect-r) sort)
@@ -407,6 +414,13 @@ def set-with-prefix fn [
 
 def set-longest-prefix fn [ [key:String t:Map] [Any] [ none "" key t longest-r ] ]
 
+# Rebuild a set from a list of keys (inverse of `keys`).
+def set-from-keys fn [
+  [keys:List] [Map] [
+    empty-node keys [ var [[k acc] (acc k true radix-insert) ] ] fold
+  ]
+]
+
 def set-encode fn [
   [t:Map] [String] [
     def ks (([] "" t collect-r) sort)
@@ -432,6 +446,7 @@ export "RadixMap" {
   keys-with-prefix:    map-keys-with-prefix/r
   entries-with-prefix: map-entries-with-prefix/r
   longest-prefix:      map-longest-prefix/r
+  from-entries:        map-from-entries/r
   encode:              map-encode/r
 }
 
@@ -445,5 +460,6 @@ export "RadixSet" {
   height:         set-height/r
   with-prefix:    set-with-prefix/r
   longest-prefix: set-longest-prefix/r
+  from-keys:      set-from-keys/r
   encode:         set-encode/r
 }

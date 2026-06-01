@@ -1,0 +1,203 @@
+# Developer-experience report: building the trie utilities in AQL
+
+This is a first-hand account of writing this library — four trie variants,
+eight namespaces, ~2000 lines of AQL plus tests — against `aql` at commit
+`b6617dd` (2026-06-01). It records what worked, what cost me time, and the
+workarounds I settled on, in the hope it is useful both to the next person
+writing AQL data structures and to the language authors.
+
+The headline: AQL is genuinely capable of expressing persistent, recursive
+data structures cleanly, and once the idioms are in hand the code reads
+well. Getting the idioms in hand, though, took a lot of empirical probing,
+because several behaviours are surprising and fail *silently* or with an
+error pointing somewhere other than the cause.
+
+---
+
+## What worked well
+
+- **Recursion with pattern-matched overloads.** Trie traversal is naturally
+  recursive, and AQL handles direct self-recursion and mutual recursion
+  without ceremony. This is the backbone of every variant.
+- **Multiple namespaces per module.** `export "A" {…}` twice in one file
+  gives a clean `A.x` / `B.x` split, which let each variant ship a `…Set`
+  and a `…Map` over one shared engine.
+- **Persistent structures fall out naturally.** Lists and maps behave as
+  values — `push` and `merge` return new structures rather than mutating —
+  so immutable, path-copying tries were the path of least resistance, not a
+  fight. I verified this explicitly (a `push` onto a shared list does not
+  disturb other references).
+- **The property-testing framework.** `test.prop` / `test.check-prop` with
+  `aql:rand` generators made it easy to cross-check the four variants
+  against each other over random inputs. This caught real differences.
+- **Error messages often point at the fix.** The recurring hint *"forward
+  args for X may have run into the next word; group the call with parens"*
+  is genuinely good and was usually correct.
+
+---
+
+## Sharp edges (and the workarounds)
+
+These are ordered roughly by how much time each one cost me.
+
+### 1. Argument order is the reverse of the call, and a type mismatch fails *silently*
+
+The rule "the first signature parameter is the top of the stack" means a
+function's parameter list is the **reverse** of its left-to-right call
+order. Calling `t key val Xxx.set` requires the signature
+`[val:Any key:String t:Map]`, not `[t key val]`. I inverted this more times
+than I'd like to admit.
+
+What made it costly is the *failure mode for namespace words*: when the
+top-of-stack type doesn't match the first parameter, dispatch does not
+error — it leaves the function value on the stack as data. So a wrong-order
+`TrieMap.get` call silently produced output like `fn map-get(Map, String)`
+interpolated into a string, with no diagnostic. For a plain (non-namespace)
+word the mismatch *does* error, which is the more helpful behaviour.
+
+*Workaround:* I adopted one mnemonic — **signature = reverse of call
+order** — and wrote the intended call form in a comment above every
+function. A linter rule that flagged a namespace member resolving to a bare
+function value (almost always an arity/order bug) would have saved hours.
+
+### 2. `fold` binds `[element accumulator]`, not `[accumulator element]`
+
+The fold body receives the *element* first and the *accumulator* second
+(`var [[elem acc] …]`), with the accumulator on top of the stack. I
+initially guessed the opposite, which silently produced wrong results for
+list-building folds (the accumulator and element got swapped into `push`).
+Worth stating prominently in the docs with a list-building example, since
+reduce/fold conventions vary across languages.
+
+### 3. `merge` is a deep, index-wise merge
+
+`{kids: [99]} {kids: [10, 20]} merge` yields `{kids: [99, 20]}` — the lists
+are merged element-by-element, not replaced. I reached for `merge` to
+update one field of a node and it silently fused sibling child-lists
+together, producing a tree where one branch's nodes leaked into another.
+This was the single hardest bug to localize because the corruption appeared
+in a subtree the edit never touched.
+
+*Workaround:* never `merge` to update a field. Rebuild the whole node with
+an explicit constructor (`do {a: [..], b: [..]}`). A shallow `assoc`/`with`
+word that replaces a single key without deep-merging would remove a real
+foot-gun.
+
+### 4. `do {k: [v]}` evaluates the map's values *as code*
+
+The idiomatic constructor `do {field: [expr]}` evaluates each value
+quotation — and if the result is a String that happens to name a word
+(`"do"`, `"if"`, `"get"`, `"fold"`), that word is *dispatched* instead of
+stored. So a `…Map` storing the value `"if"` corrupted its node. Plain
+non-word strings (`"hello"`) were fine, which is exactly what makes this
+dangerous: it passes every casual test and breaks on real data.
+
+*Workaround:* store values **boxed** — wrapped in a one-element list,
+`[] val push` — which is inert under `do`, and unbox on the way out. Every
+variant does this. (Bare-word map values like `{a: v}` resolve a
+*top-level* `def` but **not** a function parameter — "undefined word" — so
+that escape hatch wasn't available inside functions.)
+
+### 5. `eq` on lists is identity, not structure
+
+`["a" "b"] ["a" "b"] eq` is `false`. `assert.equal` *does* compare lists
+deeply (so unit tests were fine), but a property body using `eq` to compare
+two key-lists silently compared identities and passed vacuously — my
+cross-variant equivalence checks were, for a while, only verifying that the
+*lengths* matched. A distinct word for structural equality (or making `eq`
+structural for value types) would help; at minimum the asymmetry with
+`assert.equal` deserves a docs note.
+
+### 6. `get` with a bare variable index returns `none`
+
+`xs get 1` works; `xs get i` (where `i` is a binding) returns `none` — the
+forward `get` grabs the bare word rather than its value. `xs get (i)`
+(parenthesized) works. This is the same forward-collection issue as #1 but
+manifests as a silent `none` rather than an error, and it bit me twice
+(once in real code, once in a test helper that then passed vacuously).
+
+### 7. Reserved words can't be binding names — and the set is wider than expected
+
+Several names cannot be used as `def`/parameter/`var` bindings:
+- `end` (the call terminator),
+- `node` (a builtin word),
+- `eq` (the comparison word) — this one cost time, because using it as a
+  field/param name silently dispatched the comparison and produced an
+  infinite loop in a ternary-search-tree constructor,
+- single uppercase letters (`L`, `P`) — they collide with type names.
+
+The map *key* `"end"` (a string) is fine; only the binding is not. The
+error when it does surface (`invalid_word_name`, or a downstream signature
+error) rarely names the real problem. A short "reserved identifiers" list
+in the reference would help a lot.
+
+### 8. String interpolation is fragile as an argument to a recursive call
+
+`` `${a}${b}` `` works at the top level of an expression, but using it
+*inline* as an argument to a forward-dispatched recursive call (or binding
+it where the result is a word-like string) produced "no matching signature"
+and "undefined word" errors that pointed at the call, not the template.
+
+*Workaround:* build path strings with `concat` (`[a b] concat`) and bind
+them to a simple variable before passing them on. Robust everywhere I tried
+it.
+
+### 9. Smaller papercuts
+
+- **No way to build a map with computed keys.** `set` works only on
+  `Store`/`Object`, not on a `Map` literal; `make Map …` is unsupported;
+  and `refine Object` dynamic fields can't be enumerated (`items` returns
+  only declared fields). The net effect: a dynamically-keyed, *walkable*
+  map isn't expressible, which is why every node here stores children as an
+  **association list** `[[key, child], …]` instead of a keyed map.
+- **`filter` wants a `Function`, not a `[…]` quotation**, unlike `each`
+  /`fold` which happily take a bracket body. I used `fold` everywhere
+  instead.
+- **User-defined words need `end`/parens when another token follows.** A
+  bare `… my-fn ]` at the end of a block reads the `]`; `(… my-fn)` fixes
+  it. Easy once learned, but the failure is a confusing signature error.
+- **`if` is safe all-forward.** I kept every `if cond [then] [else]` with
+  the condition and branches all forward of the word; the mixed form is the
+  one to avoid.
+- **Print order is reversed** (the first printed line appears last), so demo
+  scripts print a leading blank line to restore source order.
+- **No custom error raising.** `error` is a *handler* combinator
+  (`do […] error […]`); there's no `raise`/`throw` with a message. Not
+  needed here (tries don't raise), but worth knowing.
+- **No in-memory jsonic parser.** `read` is file I/O; there is no
+  string→value parse exposed. That's why this library's round-trip is
+  data-based (`from-keys`/`from-entries`) rather than a string `decode` of
+  the `encode` snapshot. A `parse`/`unjson` word would close the loop.
+- **`do {k:[v]}` generators can be order/charset-sensitive.** A two-field
+  `do {keys:[…], q:[…]}` property generator that referenced a `def`-bound
+  charset failed where the same structure with a literal charset worked. I
+  sidestepped it by generating a single value per property.
+
+---
+
+## Suggestions, in priority order
+
+1. **Surface silent dispatch failures.** The two costliest bugs (#1, #6)
+   both failed silently — a namespace word left undispatched, a `get`
+   returning `none`. A warning when a namespace member resolves to a bare
+   function value, and an error (not `none`) when `get` is handed a bare
+   undefined word, would catch a whole class of mistakes.
+2. **A shallow field-update word** (`with`/`assoc`) so `merge` (#3) isn't
+   the only option for "replace one key".
+3. **Document the gotchas:** argument-order = reverse-of-call, fold binding
+   order, `merge` depth, `do`-evaluates-values, list `eq` vs `assert.equal`,
+   reserved identifiers, and `get (i)` vs `get i`. Each is a one-line note
+   that would save a newcomer an afternoon.
+4. **A jsonic string parser** to complement `jsonify`, enabling true
+   `encode`/`decode` round-trips.
+
+---
+
+## Bottom line
+
+I shipped four working, cross-checked, persistent trie variants with fuzzy
+and wildcard search in AQL, so the language is clearly up to the task. The
+friction was almost entirely in *discovering* the idioms, not in expressing
+the algorithms — and nearly every hour lost went to a behaviour that failed
+quietly instead of loudly. Louder failures and a handful of docs notes would
+turn a sometimes-bewildering experience into a smooth one.

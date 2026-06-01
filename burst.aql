@@ -343,6 +343,13 @@ def map-entries-with-prefix fn [
 
 def map-longest-prefix fn [ [key:String t:Map] [Any] [ none "" key t longest-b ] ]
 
+# Rebuild a map from a list of [key, value] pairs (inverse of `entries`).
+def map-from-entries fn [
+  [entries:List] [Map] [
+    ([] mk-bucket) entries [ var [[e acc] (acc (e get 0) ((e get 1) box) b-insert) ] ] fold
+  ]
+]
+
 def map-encode fn [
   [t:Map] [String] [
     def ks (([] "" t collect-b) sort)
@@ -375,6 +382,13 @@ def set-with-prefix fn [
 
 def set-longest-prefix fn [ [key:String t:Map] [Any] [ none "" key t longest-b ] ]
 
+# Rebuild a set from a list of keys (inverse of `keys`).
+def set-from-keys fn [
+  [keys:List] [Map] [
+    ([] mk-bucket) keys [ var [[k acc] (acc k (true box) b-insert) ] ] fold
+  ]
+]
+
 def set-encode fn [
   [t:Map] [String] [
     def ks (([] "" t collect-b) sort)
@@ -400,6 +414,7 @@ export "BurstMap" {
   keys-with-prefix:    map-keys-with-prefix/r
   entries-with-prefix: map-entries-with-prefix/r
   longest-prefix:      map-longest-prefix/r
+  from-entries:        map-from-entries/r
   encode:              map-encode/r
 }
 
@@ -413,5 +428,6 @@ export "BurstSet" {
   height:         set-height/r
   with-prefix:    set-with-prefix/r
   longest-prefix: set-longest-prefix/r
+  from-keys:      set-from-keys/r
   encode:         set-encode/r
 }

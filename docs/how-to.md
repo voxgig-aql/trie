@@ -176,7 +176,38 @@ def t (((TrieMap.make end) "a" 1 TrieMap.set end) "b" 2 TrieMap.set end)
 # => {entries:[['a' 1] ['b' 2]] kind:'triemap' size:2}
 ```
 
-There is no `decode`; to reload, rebuild the trie from the keys/entries.
+There is no string `decode` (AQL exposes no jsonic-string parser). For a
+programmatic round-trip, extract the data and rebuild it:
+
+```aql
+def keys (t TrieSet.keys end)        # serialize these however you like
+def t2   (keys TrieSet.from-keys end)  # …and rebuild later
+```
+
+For a map use `entries` with `Map.from-entries`. `from-keys`/`from-entries`
+are available on every variant.
+
+## Fuzzy and wildcard search (standard trie)
+
+The standard trie adds two advanced queries. **Fuzzy** search returns every
+key within a Levenshtein edit distance:
+
+```aql
+def t (((TrieSet.make end) "cat" TrieSet.add end) "car" TrieSet.add end)
+(t "cat" 1 TrieSet.within end) print   # => ["car", "cat"]
+```
+
+**Wildcard** search matches a pattern where `?` is any single character and
+`*` is any run of characters:
+
+```aql
+(t "ca?" TrieSet.match end) print      # => ["car", "cat"]
+(t "*t"  TrieSet.match end) print       # => ["cat"]
+```
+
+Both work on `TrieMap` too (returning keys). To run them over data held in
+another variant, extract its `keys`/`entries` and rebuild a `TrieSet`
+/`TrieMap` with `from-keys`/`from-entries`.
 
 ---
 

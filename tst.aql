@@ -287,6 +287,13 @@ def map-entries-with-prefix fn [
 
 def map-longest-prefix fn [ [key:String t:Any] [Any] [ none "" key t longest-t ] ]
 
+# Rebuild a map from a list of [key, value] pairs (inverse of `entries`).
+def map-from-entries fn [
+  [entries:List] [Any] [
+    none entries [ var [[e acc] (acc (e get 0) (e get 1) tst-insert) ] ] fold
+  ]
+]
+
 def map-encode fn [
   [t:Any] [String] [
     def ks (([] "" t collect-t) sort)
@@ -332,6 +339,13 @@ def set-with-prefix fn [
 
 def set-longest-prefix fn [ [key:String t:Any] [Any] [ none "" key t longest-t ] ]
 
+# Rebuild a set from a list of keys (inverse of `keys`).
+def set-from-keys fn [
+  [keys:List] [Any] [
+    none keys [ var [[k acc] (acc k true tst-insert) ] ] fold
+  ]
+]
+
 def set-encode fn [
   [t:Any] [String] [
     def ks (([] "" t collect-t) sort)
@@ -357,6 +371,7 @@ export "TstMap" {
   keys-with-prefix:    map-keys-with-prefix/r
   entries-with-prefix: map-entries-with-prefix/r
   longest-prefix:      map-longest-prefix/r
+  from-entries:        map-from-entries/r
   encode:              map-encode/r
 }
 
@@ -370,5 +385,6 @@ export "TstSet" {
   height:         set-height/r
   with-prefix:    set-with-prefix/r
   longest-prefix: set-longest-prefix/r
+  from-keys:      set-from-keys/r
   encode:         set-encode/r
 }

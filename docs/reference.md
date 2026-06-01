@@ -119,6 +119,19 @@ The longest member that is a prefix of `key`, or `none` if no member is.
 | **Call** | `t key Set.longest-prefix end` |
 | **Returns** | `String` or `none` |
 
+### `Set.from-keys`
+
+Rebuild a set from a list of keys — the inverse of `keys`, so
+`(t keys) from-keys` reproduces `t`. This is the data round-trip for
+`encode` (AQL exposes no jsonic-string parser, so there is no string
+`decode`; serialize `keys` yourself and rebuild with `from-keys`).
+
+| | |
+|--|--|
+| **Call** | `keys Set.from-keys end` |
+| **Stack in** | a `List` of `String` keys |
+| **Returns** | a new set containing exactly those keys |
+
 ### `Set.keys`
 
 | | |
@@ -199,6 +212,62 @@ Keys beginning with `prefix`, sorted (the map analogue of
 |--|--|
 | **Call** | `t Map.values end` / `t Map.entries end` |
 | **Returns** | values (in key-sorted order) / `[key, value]` pairs (key-sorted) |
+
+### `Map.from-entries`
+
+Rebuild a map from a list of `[key, value]` pairs — the inverse of
+`entries`, so `(t entries) from-entries` reproduces `t`. The data
+round-trip for `encode` (see `Set.from-keys` for why there is no string
+`decode`).
+
+| | |
+|--|--|
+| **Call** | `entries Map.from-entries end` |
+| **Stack in** | a `List` of `[key, value]` pairs |
+| **Returns** | a new map binding each pair |
+
+---
+
+## Advanced queries — standard trie only (`TrieSet`, `TrieMap`)
+
+These two queries are provided on the standard trie, where the
+character-per-node structure makes them efficient and idiomatic. Both
+return keys, sorted. (For another variant, extract its `keys` and rebuild
+a `TrieSet`/`TrieMap` with `from-keys`/`from-entries` to query.)
+
+### `within` — fuzzy (edit-distance) search
+
+Every key within Levenshtein (insert/delete/substitute) distance `k` of
+`query`. Implemented by walking the trie carrying one DP row and pruning a
+subtree as soon as its whole row exceeds `k`.
+
+| | |
+|--|--|
+| **Call** | `t query k TrieSet.within end` / `t query k TrieMap.within end` |
+| **Stack in** | the trie, the query (`String`), then the budget `k` (`Integer`) |
+| **Returns** | `List` of keys within distance `k`, sorted |
+
+```aql
+def t (((TrieSet.make end) "cat" TrieSet.add end) "car" TrieSet.add end)
+(t "cat" 1 TrieSet.within end) print   # => ["car", "cat"]
+```
+
+### `match` — wildcard search
+
+Every key matching a pattern, where `?` matches any single character, `*`
+matches any run of characters (including none), and any other character is
+a literal.
+
+| | |
+|--|--|
+| **Call** | `t pattern TrieSet.match end` / `t pattern TrieMap.match end` |
+| **Stack in** | the trie, then the pattern (`String`) |
+| **Returns** | `List` of matching keys, sorted |
+
+```aql
+(t "ca?" TrieSet.match end) print   # => ["car", "cat"]
+(t "c*"  TrieSet.match end) print   # => ["car", "cat"]
+```
 
 ---
 
