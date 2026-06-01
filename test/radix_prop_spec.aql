@@ -1,0 +1,153 @@
+# Property-based tests for the radix tree — DECLARATIVE SPEC FORMAT.
+#
+# Same invariants as the standard trie, plus a cross-check that a RadixSet
+# and a TrieSet built from identical keys agree exactly — the compression
+# must not change observable behaviour.
+#
+# Run:
+#   aql test/radix_prop_spec.aql
+
+
+"aql:test"    import end
+"./radix.aql" import end
+"./trie.aql"  import end
+
+
+def charset "abcdefghijklmnopqrstuvwxyz"
+
+
+# Call: `s pfx starts-with`.
+def starts-with fn [
+  [pfx:String s:String] [Boolean] [
+    def n (pfx size)
+    if ((s size) lt n) [false] [ (s slice 0 n) pfx eq ]
+  ]
+]
+
+def radix-of fn [
+  [keys:List] [Map] [
+    (RadixSet.make end) keys [ var [[k acc] acc k RadixSet.add end ] ] fold
+  ]
+]
+
+def trie-of fn [
+  [keys:List] [Map] [
+    (TrieSet.make end) keys [ var [[k acc] acc k TrieSet.add end ] ] fold
+  ]
+]
+
+# Element-wise list equality (AQL `eq` on lists is identity, not deep).
+def list-eq fn [
+  [a:List b:List] [Boolean] [
+    if (((a size) (b size) eq) not) [false] [
+      true (iota (a size)) [ var [[i acc] acc ((a get i) (b get i) eq) and ] ] fold
+    ]
+  ]
+]
+
+def all-have-prefix fn [
+  [p:String xs:List] [Boolean] [
+    (xs each [ var [[x] x p starts-with ] ]) all end
+  ]
+]
+
+def report fn [
+  [res:Map] [] [
+    def ok (res "ok" get)
+    def nm (res "name" get)
+    def msg (if ok
+      [`ok   ${nm} (${(res "runs" get)} runs)`]
+      [`FAIL ${nm}  failing-input: ${(res "failing-input" get)}`])
+    msg print
+  ]
+]
+
+
+def specs [
+
+  # 1. add then has.
+  (test.prop "add-then-has"
+    [ r.string charset (r.int 1 12) ]
+    [ var [[key]
+        def s ((RadixSet.make end) key RadixSet.add end)
+        (s key RadixSet.has end)
+    ] ])
+
+  # 2. empty has nothing.
+  (test.prop "empty-has-nothing"
+    [ r.string charset (r.int 1 12) ]
+    [ var [[key] ((RadixSet.make end) key RadixSet.has end) not ] ])
+
+  # 3. set then get.
+  (test.prop "set-then-get"
+    [ do { k: [r.string charset (r.int 1 12)], v: [r.int 0 1000] } ]
+    [ var [[in]
+        def k (in "k" get)
+        def v (in "v" get)
+        def t ((RadixMap.make end) k v RadixMap.set end)
+        (t k RadixMap.get end) v eq
+    ] ])
+
+  # 4. all inserted keys present.
+  (test.prop "bulk-all-present"
+    [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 1 15) ]
+    [ var [[keys]
+        def s (keys radix-of)
+        (keys each [ var [[k] s k RadixSet.has end ] ]) all end
+    ] ])
+
+  # 5. prefix soundness.
+  (test.prop "prefix-sound"
+    [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 1 15) ]
+    [ var [[keys]
+        def s (keys radix-of)
+        def p (keys get 0)
+        def hits (s p RadixSet.with-prefix end)
+        hits p all-have-prefix
+    ] ])
+
+  # 6. delete removes exactly one.
+  (test.prop "delete-removes-one"
+    [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 2 15) ]
+    [ var [[keys]
+        def s (keys radix-of)
+        def k (keys get 0)
+        def before (s RadixSet.size end)
+        def s2 (s k RadixSet.delete end)
+        def gone ((s2 k RadixSet.has end) not)
+        def smaller ((s2 RadixSet.size end) (before 1 sub) eq)
+        gone smaller and
+    ] ])
+
+  # 7. CROSS-CHECK: a RadixSet and a TrieSet over identical keys expose the
+  #    same sorted key list. Compression must be behaviour-preserving.
+  (test.prop "radix-matches-trie"
+    [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 1 20) ]
+    [ var [[keys]
+        def r (keys radix-of)
+        def t (keys trie-of)
+        (r RadixSet.keys end) (t TrieSet.keys end) list-eq
+    ] ])
+
+  # 8. longest-prefix over nested keys returns the longest stored prefix.
+  (test.prop "longest-prefix-nested"
+    [ r.string charset 10 ]
+    [ var [[s]
+        def k1 (s slice 0 2)
+        def k2 (s slice 0 5)
+        def t (((RadixSet.make end) k1 RadixSet.add end) k2 RadixSet.add end)
+        (t s RadixSet.longest-prefix end) k2 eq
+    ] ])
+
+]
+
+
+def _ (specs each [ var [[s] (s test.run-property end) report 0 ] ])
+
+
+# --- summary -------------------------------------------------------
+
+"---" print
+"fail count: " print test.fail-count end print
+0 test.fail-count end assert.equal end
+"all green" print
