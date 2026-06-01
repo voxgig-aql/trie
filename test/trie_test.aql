@@ -110,6 +110,15 @@ def fixture fn [
 ] "map-delete" test.test end
 
 
+# --- TrieMap: entries and values are key-sorted ---------------------
+
+[
+  def t (((TrieMap.make end) "b" 2 TrieMap.set end) "a" 1 TrieMap.set end)
+  [["a" 1] ["b" 2]] (t TrieMap.entries end) assert.equal end
+  [1 2]             (t TrieMap.values  end) assert.equal end
+] "map-entries" test.test end
+
+
 # --- TrieSet: add / has / membership --------------------------------
 
 [

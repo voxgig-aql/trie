@@ -284,11 +284,17 @@ def map-keys fn [ [t:Map] [List] [ [] "" t collect-keys sort ] ]
 
 def map-values fn [
   [t:Map] [List] [
-    [] ([] "" t collect-entries) [ var [[e acc] acc (e get 1) push ] ] fold
+    def ks (([] "" t collect-keys) sort)
+    ks each [ var [[k] (t k map-get) ] ]
   ]
 ]
 
-def map-entries fn [ [t:Map] [List] [ [] "" t collect-entries ] ]
+def map-entries fn [
+  [t:Map] [List] [
+    def ks (([] "" t collect-keys) sort)
+    ks each [ var [[k] def v (t k map-get) [] k push v push ] ]
+  ]
+]
 
 def map-size fn [ [t:Map] [Integer] [ t count-keys ] ]
 

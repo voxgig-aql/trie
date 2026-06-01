@@ -1,218 +1,232 @@
 # Reference
 
-Technical description of the `bloom-filter` module's public surface.
-This page is information-oriented: it states what each word is, its
-stack signature, and what it returns. For *why* the filter behaves the
-way it does, see [Explanation](explanation.md); for goal-directed
-recipes, see the [How-to guides](how-to.md).
+Technical description of the trie utilities' public surface. This page is
+information-oriented: it states what each word is, its call form, and what
+it returns. For *why* the variants behave as they do, see
+[Explanation](explanation.md); for goal-directed recipes, see the
+[How-to guides](how-to.md).
 
-The module exports a single namespace, `Bloom`, plus two types. Import
-it with:
+The library is four modules, each exporting two namespaces over a shared
+engine:
+
+| Module | Set namespace | Map namespace |
+|--------|---------------|---------------|
+| `trie.aql`  | `TrieSet`  | `TrieMap`  |
+| `radix.aql` | `RadixSet` | `RadixMap` |
+| `tst.aql`   | `TstSet`   | `TstMap`   |
+| `burst.aql` | `BurstSet` | `BurstMap` |
+
+Import the variant you want:
 
 ```aql
-"./bloom.aql" import end
+"./trie.aql"  import end
+"./radix.aql" import end
+"./tst.aql"   import end
+"./burst.aql" import end
 ```
 
-A consuming script does **not** need to import `aql:math` or
-`aql:array` itself — `bloom.aql` imports them internally.
+A consuming script does **not** need to import anything else; each module
+pulls in its own dependencies.
 
 ---
 
 ## Calling convention
 
-Every operation is a forward-dispatched word and must be terminated
-with `end` (or wrapped in parentheses) at the call site, e.g.
-`bf "x" Bloom.add end` or `(bf "x" Bloom.add)`. Without a terminator
-the word collects the following token as an argument. This is general
-AQL forward-precedence behaviour, not specific to this module.
+Every operation is a forward-dispatched word and must be terminated with
+`end` (or wrapped in parentheses) at the call site, e.g.
+`t "x" TrieSet.add end` or `(t "x" TrieSet.add)`. Without a terminator the
+word collects the following token as an argument. This is general AQL
+forward-precedence behaviour, not specific to this library.
 
-Argument order follows the AQL rule "first signature parameter is the
-top of the stack". The call-site columns below show the natural
-left-to-right order to write.
+The receiver (the trie) is written first and the arguments follow:
+`t key value Map.set end`. Keys are Strings; values may be any type.
+
+### Immutability
+
+Tries are **persistent**. `add`, `set`, and `delete` return a *new* trie
+and leave the argument unchanged; bind the result:
+
+```aql
+def t1 (t0 "a" TrieSet.add end)   # t0 is still whatever it was
+```
+
+### The trie value
+
+`make` returns an opaque trie value — treat it as a handle and operate on
+it only through the namespace words. (Internally a standard/radix/burst
+trie is a `Map` and an empty ternary search tree is `none`; do not rely on
+this.)
 
 ---
 
-## Types
+## Set namespaces — `TrieSet`, `RadixSet`, `TstSet`, `BurstSet`
 
-### `BloomFilter`
+All four expose an identical surface. `Set` below stands for any of them.
 
-A `refine Object` subtype — the filter instance. Fields:
-
-| Field   | Type     | Meaning                                            |
-|---------|----------|----------------------------------------------------|
-| `n`     | Integer  | Target capacity (expected number of distinct items)|
-| `p`     | Decimal  | Target false-positive probability                  |
-| `m`     | Integer  | Derived bit-array width                             |
-| `k`     | Integer  | Derived number of hash functions                   |
-| `added` | Integer  | Count of `add` calls made against this filter      |
-| `bits`  | `Bits`   | Sparse bit storage                                 |
-
-Instances are created only through `Bloom.make`. Treat the fields as
-read-only; mutate exclusively through the namespace words.
-
-### `Bits`
-
-A `refine Object {}` used as a sparse bit set: a set bit at index `i`
-is stored as the field `"<i>": 1`. Indices that were never set are
-absent (and read as `0`). Internal to the module; you should not need
-to touch it directly.
-
----
-
-## Words
-
-### `Bloom.make`
-
-Construct a filter sized for a target capacity and false-positive rate.
+### `Set.make`
 
 | | |
 |--|--|
-| **Call**    | `{n: Integer, p: Decimal} Bloom.make end` |
-| **Stack in**| an options Map with keys `n` and `p` |
-| **Returns** | `BloomFilter` |
+| **Call** | `Set.make end` |
+| **Returns** | a new, empty trie |
 
-`m` and `k` are derived from `n` and `p` (see
-[Explanation §Sizing](explanation.md#sizing-the-filter)). `p` must be
-in `(0, 1)`; values `> 0.5` round `k` down toward `0` and are not
-useful.
+### `Set.add`
 
-```aql
-def bf ({n: 1000, p: 0.01} Bloom.make end)
-(bf Bloom.params end) print
-# => {"k": 7, "m": 9586, "n": 1000, "p": 0.01}
-```
-
-### `Bloom.add`
-
-Insert an item. Any value is accepted; it is stringified internally
-before hashing.
+Insert a key. Adding a key already present is a no-op (idempotent).
 
 | | |
 |--|--|
-| **Call**    | `bf item Bloom.add end` |
-| **Stack in**| `BloomFilter`, then the item (`Any`) |
-| **Returns** | the same `BloomFilter`, mutated in place |
-| **Effect**  | sets `k` bits; increments `added` by 1 |
+| **Call** | `t key Set.add end` |
+| **Stack in** | the trie, then the key (`String`) |
+| **Returns** | a new trie containing `key` |
 
-`add` mutates the filter it is given and also returns it, so the
-return value and the argument are the same object. Adding the same
-item twice sets no new bits but still increments `added`.
-
-### `Bloom.contains`
-
-Test membership.
+### `Set.has`
 
 | | |
 |--|--|
-| **Call**    | `bf item Bloom.contains end` |
-| **Stack in**| `BloomFilter`, then the item (`Any`) |
-| **Returns** | `Boolean` |
+| **Call** | `t key Set.has end` |
+| **Returns** | `Boolean` — whether `key` is a member |
 
-`false` means the item was **definitely never added**. `true` means
-the item was **probably added** — it may be a false positive at
-approximately rate `p`. There are no false negatives. See
-[Explanation §No false negatives](explanation.md#why-there-are-no-false-negatives).
+A pure prefix of a stored key is **not** itself a member unless it was
+added in its own right (`has "ca"` is `false` after adding only `"cat"`).
 
-```aql
-def _ (bf "alice" Bloom.add end)
-(bf "alice" Bloom.contains end) print   # => true
-(bf "carol" Bloom.contains end) print   # => false
-```
+### `Set.delete`
 
-### `Bloom.count`
-
-Estimate the number of distinct items added.
+Remove a key (a no-op if absent). Keys that sit *below* the deleted key
+are preserved.
 
 | | |
 |--|--|
-| **Call**    | `bf Bloom.count end` |
-| **Stack in**| `BloomFilter` |
-| **Returns** | `Integer` (estimate) |
+| **Call** | `t key Set.delete end` |
+| **Returns** | a new trie without `key` |
 
-Uses the Swamidass–Baldi estimator over the set-bit population, with a
-guard that returns the exact `added` count when every bit is set. The
-result is an **approximation** and typically drifts below the true
-insert count as the filter fills (e.g. 100 distinct inserts into a
-`{n:1000, p:0.01}` filter estimates ≈ 90). An empty filter counts `0`.
-Cost is `O(m)`.
+### `Set.with-prefix`
 
-### `Bloom.params`
-
-Return the filter's parameters as a Map.
+Every member that begins with `prefix`, sorted. An empty `prefix` returns
+all keys; a prefix present in no key returns `[]`.
 
 | | |
 |--|--|
-| **Call**    | `bf Bloom.params end` |
-| **Stack in**| `BloomFilter` |
-| **Returns** | `Map` with integer/decimal keys `n`, `p`, `m`, `k` |
+| **Call** | `t prefix Set.with-prefix end` |
+| **Returns** | `List` of `String` keys |
 
-```aql
-def ps (bf Bloom.params end)
-(ps "m" get) print   # => 9586
-```
+### `Set.longest-prefix`
 
-### `Bloom.merge`
-
-Union two filters into the first.
+The longest member that is a prefix of `key`, or `none` if no member is.
 
 | | |
 |--|--|
-| **Call**    | `a b Bloom.merge end` |
-| **Stack in**| target `BloomFilter` `a`, then source `BloomFilter` `b` |
-| **Returns** | `a`, now containing every bit that was set in `a` or `b` |
-| **Effect**  | mutates `a` in place; `b` is unchanged; `a.added` becomes `a.added + b.added` |
-| **Errors**  | raises if `a` and `b` have different `m` or `k` |
+| **Call** | `t key Set.longest-prefix end` |
+| **Returns** | `String` or `none` |
 
-Both filters must have identical `m` and `k`, which happens
-automatically when both were built with the same `(n, p)`. After a
-merge, every item present in `a` or `b` reads as contained.
-
-On a precondition violation `merge` raises a catchable error —
-`undefined_word: bloom-merge-requires-equal-m` (or `…-equal-k`). Trap
-it with `do […] error […]` or `assert.throws`. (The unusual error
-class is a consequence of aql 5b983b6 removing custom error raising;
-see [Explanation §Raising errors](explanation.md#raising-errors-in-aql-5b983b6)
-and `dx-report.md` §9.10.)
-
-### `Bloom.encode`
-
-Serialize the filter to a jsonic-style string snapshot.
+### `Set.keys`
 
 | | |
 |--|--|
-| **Call**    | `bf Bloom.encode end` |
-| **Stack in**| `BloomFilter` |
+| **Call** | `t Set.keys end` |
+| **Returns** | `List` of all members, sorted ascending |
+
+### `Set.size` / `Set.height`
+
+| | |
+|--|--|
+| **Call** | `t Set.size end` / `t Set.height end` |
+| **Returns** | `Integer` — number of members / structural depth of the tree |
+
+`height` reflects each variant's own shape (see
+[Explanation](explanation.md)); compare sizes across variants, not heights.
+
+### `Set.encode`
+
+A one-way jsonic-style snapshot string carrying the kind, size, and sorted
+keys. Suitable for logging or inspection; there is no `decode`.
+
+| | |
+|--|--|
+| **Call** | `t Set.encode end` |
 | **Returns** | `String` |
 
-The string carries `n`, `p`, `m`, `k`, `added`, and the sorted list of
-set bit indices. Cost is `O(m)`.
+---
 
-```aql
-(bf Bloom.encode end) print
-# => {added:1 k:7 m:9586 n:1000 p:0.01 set:[223 1110 2827 3714 4601 6318 7205]}
-```
+## Map namespaces — `TrieMap`, `RadixMap`, `TstMap`, `BurstMap`
 
-There is no `decode` word in the public surface today; `encode` is a
-one-way snapshot suitable for logging, inspection, or persistence.
+A `Map` carries everything a `Set` does (`make`, `has`, `delete`,
+`longest-prefix`, `keys`, `size`, `height`, `encode`) with `add` replaced
+by `set`, plus the value-oriented words below. `Map` stands for any of the
+four map namespaces.
+
+### `Map.set`
+
+Insert or replace the value bound to `key`. Any value type is accepted,
+including Strings that happen to name AQL words (e.g. `"if"`, `"do"`).
+
+| | |
+|--|--|
+| **Call** | `t key value Map.set end` |
+| **Stack in** | the trie, the key (`String`), then the value (`Any`) |
+| **Returns** | a new trie binding `key → value` |
+
+### `Map.get`
+
+| | |
+|--|--|
+| **Call** | `t key Map.get end` |
+| **Returns** | the bound value, or `none` if `key` is absent |
+
+`none` is also a legal stored value; use `has` to disambiguate "absent"
+from "present with value `none`".
+
+### `Map.keys-with-prefix`
+
+Keys beginning with `prefix`, sorted (the map analogue of
+`Set.with-prefix`).
+
+| | |
+|--|--|
+| **Call** | `t prefix Map.keys-with-prefix end` |
+| **Returns** | `List` of `String` keys |
+
+### `Map.entries-with-prefix`
+
+| | |
+|--|--|
+| **Call** | `t prefix Map.entries-with-prefix end` |
+| **Returns** | `List` of `[key, value]` pairs for keys under `prefix` |
+
+### `Map.values` / `Map.entries`
+
+| | |
+|--|--|
+| **Call** | `t Map.values end` / `t Map.entries end` |
+| **Returns** | values (in key-sorted order) / `[key, value]` pairs (key-sorted) |
 
 ---
+
+## Behaviour shared by all variants
+
+- **Sorted output.** `keys`, `with-prefix`, `keys-with-prefix`, `values`,
+  and `entries` return keys in ascending order.
+- **No false answers.** `has` is exact: there are no false positives or
+  negatives (unlike a bloom filter).
+- **Equivalence.** For the same keys, all four variants expose the same
+  `keys`, `has`, `with-prefix`, and `longest-prefix` results. They differ
+  only in internal shape, memory, and `height`.
 
 ## Errors at a glance
 
-| Situation                              | Result |
-|----------------------------------------|--------|
-| `merge` with mismatched `m`            | raises `undefined_word: bloom-merge-requires-equal-m` |
-| `merge` with mismatched `k`            | raises `undefined_word: bloom-merge-requires-equal-k` |
-| missing `end` after a `Bloom.*` call   | dispatch error on the following word (add `end` or parens) |
+| Situation | Result |
+|-----------|--------|
+| `get`/`has` on an absent key | `none` / `false` (never an error) |
+| `delete` of an absent key | returns an equivalent trie (no-op) |
+| missing `end` after a call | dispatch error on the following word (add `end` or parens) |
 
-## Complexity
+## Complexity (n keys, key length L, alphabet σ)
 
-| Word       | Cost   |
-|------------|--------|
-| `make`     | `O(1)` |
-| `add`      | `O(k)` |
-| `contains` | `O(k)` |
-| `count`    | `O(m)` |
-| `params`   | `O(1)` |
-| `merge`    | `O(m)` |
-| `encode`   | `O(m)` |
+| Word | Standard / Radix / TST / Burst |
+|------|--------------------------------|
+| `make` | `O(1)` |
+| `add` / `set` / `get` / `has` | `O(L)` per character step (TST adds a per-step BST search; burst adds a bucket scan) |
+| `delete` | `O(L)` |
+| `with-prefix` / `keys-with-prefix` | `O(L + m)` for `m` matching keys |
+| `longest-prefix` | `O(L)` |
+| `keys` / `values` / `entries` / `size` / `encode` | `O(total key length)` |
