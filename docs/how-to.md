@@ -35,7 +35,7 @@ Put `$HOME/.local/bin` on your `PATH`, then check and run:
 
 ```bash
 aql -version
-aql index.aql
+aql test/smoke.aql
 ```
 
 This library is verified against aql commit `b6617dd`; the CI workflow
@@ -223,7 +223,7 @@ def t (RadixSet.make end)
 ```
 
 Every call must end with `end` (or be wrapped in parens) so the word
-doesn't swallow the following token. `index.aql` is a complete worked
+doesn't swallow the following token. `test/smoke.aql` is a complete worked
 example you can copy from.
 
 ---

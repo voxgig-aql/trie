@@ -1,5 +1,5 @@
 # Smoke demo for the trie utilities. Imports all four variants and walks
-# the common surface of each, so `aql index.aql` is a quick end-to-end
+# the common surface of each, so `aql test/smoke.aql` is a quick end-to-end
 # check that every module loads and answers.
 
 "./trie.aql"  import end

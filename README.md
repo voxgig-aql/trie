@@ -71,6 +71,10 @@ modes, each serving a different need:
 | 📖 | **[Reference](docs/reference.md)** | look up exact words, signatures, and return types |
 | 💡 | **[Explanation](docs/explanation.md)** | understand how each variant works and why it's built this way |
 
+**For AI coding agents:** start with [`CLAUDE.md`](CLAUDE.md) (also available as
+[`AGENTS.md`](AGENTS.md)) — a compact guide to importing, calling, and the AQL
+foot-guns to avoid. A machine-readable API manifest is in [`api.json`](api.json).
+
 New here? Start with the [Tutorial](docs/tutorial.md). Just want the API?
 Jump to the [Reference](docs/reference.md).
 
@@ -81,7 +85,7 @@ trie.aql                  standard trie        (TrieSet,  TrieMap)
 radix.aql                 radix / PATRICIA     (RadixSet, RadixMap)
 tst.aql                   ternary search tree  (TstSet,   TstMap)
 burst.aql                 burst / HAT trie     (BurstSet, BurstMap)
-index.aql                 smoke demo across all four variants
+test/smoke.aql                smoke demo across all four variants
 test/<variant>_test.aql       example-based unit tests
 test/<variant>_prop_spec.aql  property-based tests (declarative spec form)
 test/trie_pbt.aql             property-based tests (direct test.check-prop form)
@@ -95,7 +99,7 @@ Build the `aql` interpreter, then run the demo or any test — see
 [How-to → Install and run](docs/how-to.md#install-and-run-aql):
 
 ```bash
-aql index.aql                  # smoke demo
+aql test/smoke.aql             # smoke demo
 aql test/trie_test.aql         # unit tests (one suite per variant)
 aql test/trie_prop_spec.aql    # property tests
 ```
