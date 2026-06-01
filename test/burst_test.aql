@@ -11,18 +11,18 @@ import "./burst.aql"
 
 def fixture fn [
   [] [Map] [
-    ((((( BurstMap.make end)
-      "cat"  1 BurstMap.set end)
-      "car"  2 BurstMap.set end)
-      "card" 3 BurstMap.set end)
-      "dog"  4 BurstMap.set end)
+    ((((( BurstMap.make)
+      "cat"  1 BurstMap.set)
+      "car"  2 BurstMap.set)
+      "card" 3 BurstMap.set)
+      "dog"  4 BurstMap.set)
   ]
 ]
 
 # Insert keys key0..key(n-1) -> 0..n-1 to force buckets to burst.
 def many fn [
   [n:Integer] [Map] [
-    (BurstMap.make end) (iota n) [
+    (BurstMap.make) (iota n) [
       var [[i acc] def k ([ "key" (convert String i) ] concat) acc k i BurstMap.set end ]
     ] fold
   ]
@@ -32,11 +32,11 @@ def many fn [
 # --- empty -----------------------------------------------------------
 
 [
-  def t (BurstMap.make end)
-  0     (t BurstMap.size end)          assert.equal end
-  false (t "x" BurstMap.has end)       assert.equal end
-  none  (t "x" BurstMap.get end)       assert.equal end
-  []    (t BurstMap.keys end)          assert.equal end
+  def t (BurstMap.make)
+  0     (t BurstMap.size)          assert.equal end
+  false (t "x" BurstMap.has)       assert.equal end
+  none  (t "x" BurstMap.get)       assert.equal end
+  []    (t BurstMap.keys)          assert.equal end
 ] "burst-empty" test.test end
 
 
@@ -44,12 +44,12 @@ def many fn [
 
 [
   def t (fixture)
-  1 (t "cat"  BurstMap.get end) assert.equal end
-  2 (t "car"  BurstMap.get end) assert.equal end
-  3 (t "card" BurstMap.get end) assert.equal end
-  4 (t "dog"  BurstMap.get end) assert.equal end
-  false (t "ca" BurstMap.has end) assert.equal end
-  none  (t "ca" BurstMap.get end) assert.equal end
+  1 (t "cat"  BurstMap.get) assert.equal end
+  2 (t "car"  BurstMap.get) assert.equal end
+  3 (t "card" BurstMap.get) assert.equal end
+  4 (t "dog"  BurstMap.get) assert.equal end
+  false (t "ca" BurstMap.has) assert.equal end
+  none  (t "ca" BurstMap.get) assert.equal end
 ] "burst-set-get" test.test end
 
 
@@ -57,9 +57,9 @@ def many fn [
 
 [
   def t  (fixture)
-  def t2 (t "cat" 99 BurstMap.set end)
-  99 (t2 "cat" BurstMap.get end) assert.equal end
-  1  (t  "cat" BurstMap.get end) assert.equal end
+  def t2 (t "cat" 99 BurstMap.set)
+  99 (t2 "cat" BurstMap.get) assert.equal end
+  1  (t  "cat" BurstMap.get) assert.equal end
 ] "burst-overwrite" test.test end
 
 
@@ -68,17 +68,17 @@ def many fn [
 [
   # 30 keys >> burst-limit (8), so the root bucket must burst into a trie.
   def t (30 many)
-  30 (t BurstMap.size end) assert.equal end
+  30 (t BurstMap.size) assert.equal end
   # every inserted key is still retrievable with its value
   def hits (iota 30 each [
     var [[i]
       def k ([ "key" (convert String i) ] concat)
-      if ((t k BurstMap.get end) i eq) [1] [0]
+      if ((t k BurstMap.get) i eq) [1] [0]
     ]
   ])
   30 (0 hits [add end] fold) assert.equal end
   # a never-inserted key is absent
-  false (t "nope" BurstMap.has end) assert.equal end
+  false (t "nope" BurstMap.has) assert.equal end
 ] "burst-bursts" test.test end
 
 
@@ -86,8 +86,8 @@ def many fn [
 
 [
   def t (fixture)
-  4 (t BurstMap.size end) assert.equal end
-  ["car" "card" "cat" "dog"] (t BurstMap.keys end) assert.equal end
+  4 (t BurstMap.size) assert.equal end
+  ["car" "card" "cat" "dog"] (t BurstMap.keys) assert.equal end
 ] "burst-stats" test.test end
 
 
@@ -95,10 +95,10 @@ def many fn [
 
 [
   def t (fixture)
-  ["car" "card" "cat"] (t "ca" BurstMap.keys-with-prefix end) assert.equal end
-  ["card"]             (t "card" BurstMap.keys-with-prefix end) assert.equal end
-  []                   (t "z" BurstMap.keys-with-prefix end) assert.equal end
-  ["car" "card" "cat" "dog"] (t "" BurstMap.keys-with-prefix end) assert.equal end
+  ["car" "card" "cat"] (t "ca" BurstMap.keys-with-prefix) assert.equal end
+  ["card"]             (t "card" BurstMap.keys-with-prefix) assert.equal end
+  []                   (t "z" BurstMap.keys-with-prefix) assert.equal end
+  ["car" "card" "cat" "dog"] (t "" BurstMap.keys-with-prefix) assert.equal end
 ] "burst-prefix" test.test end
 
 
@@ -107,7 +107,7 @@ def many fn [
 [
   def t (30 many)
   # keys key0..key29; prefix "key1" matches key1, key10..key19
-  def hits (t "key1" BurstMap.keys-with-prefix end)
+  def hits (t "key1" BurstMap.keys-with-prefix)
   11 (hits size) assert.equal end
 ] "burst-prefix-after-burst" test.test end
 
@@ -116,10 +116,10 @@ def many fn [
 
 [
   def t (fixture)
-  "card" (t "cardiff" BurstMap.longest-prefix end) assert.equal end
-  "car"  (t "carrot"  BurstMap.longest-prefix end) assert.equal end
-  "cat"  (t "cat"     BurstMap.longest-prefix end) assert.equal end
-  none   (t "zebra"   BurstMap.longest-prefix end) assert.equal end
+  "card" (t "cardiff" BurstMap.longest-prefix) assert.equal end
+  "car"  (t "carrot"  BurstMap.longest-prefix) assert.equal end
+  "cat"  (t "cat"     BurstMap.longest-prefix) assert.equal end
+  none   (t "zebra"   BurstMap.longest-prefix) assert.equal end
 ] "burst-longest-prefix" test.test end
 
 
@@ -127,55 +127,55 @@ def many fn [
 
 [
   def t  (fixture)
-  def t2 (t "car" BurstMap.delete end)
-  false (t2 "car"  BurstMap.has end) assert.equal end
-  true  (t2 "card" BurstMap.has end) assert.equal end
-  true  (t2 "cat"  BurstMap.has end) assert.equal end
-  3     (t2 BurstMap.size end) assert.equal end
-  def t3 (t2 "nope" BurstMap.delete end)
-  3     (t3 BurstMap.size end) assert.equal end
+  def t2 (t "car" BurstMap.delete)
+  false (t2 "car"  BurstMap.has) assert.equal end
+  true  (t2 "card" BurstMap.has) assert.equal end
+  true  (t2 "cat"  BurstMap.has) assert.equal end
+  3     (t2 BurstMap.size) assert.equal end
+  def t3 (t2 "nope" BurstMap.delete)
+  3     (t3 BurstMap.size) assert.equal end
 ] "burst-delete" test.test end
 
 
 # --- entries + values + reserved-word values ------------------------
 
 [
-  def t (((BurstMap.make end) "a" 10 BurstMap.set end) "ab" "do" BurstMap.set end)
-  [["a" 10] ["ab" "do"]] (t BurstMap.entries end) assert.equal end
-  [10 "do"]              (t BurstMap.values  end) assert.equal end
-  "do" (t "ab" BurstMap.get end) assert.equal end
+  def t (((BurstMap.make) "a" 10 BurstMap.set) "ab" "do" BurstMap.set)
+  [["a" 10] ["ab" "do"]] (t BurstMap.entries) assert.equal end
+  [10 "do"]              (t BurstMap.values) assert.equal end
+  "do" (t "ab" BurstMap.get) assert.equal end
 ] "burst-entries" test.test end
 
 
 # --- BurstSet --------------------------------------------------------
 
 [
-  def s ((((BurstSet.make end)
-    "alpha" BurstSet.add end)
-    "alpine" BurstSet.add end)
-    "beta" BurstSet.add end)
-  true  (s "alpha"  BurstSet.has end) assert.equal end
-  false (s "alp"    BurstSet.has end) assert.equal end
-  3     (s BurstSet.size end) assert.equal end
-  ["alpha" "alpine" "beta"] (s BurstSet.keys end) assert.equal end
-  ["alpha" "alpine"] (s "alp" BurstSet.with-prefix end) assert.equal end
-  "alpha" (s "alphabet" BurstSet.longest-prefix end) assert.equal end
-  def s2 (s "alpha" BurstSet.delete end)
-  false (s2 "alpha"  BurstSet.has end) assert.equal end
-  true  (s2 "alpine" BurstSet.has end) assert.equal end
+  def s ((((BurstSet.make)
+    "alpha" BurstSet.add)
+    "alpine" BurstSet.add)
+    "beta" BurstSet.add)
+  true  (s "alpha"  BurstSet.has) assert.equal end
+  false (s "alp"    BurstSet.has) assert.equal end
+  3     (s BurstSet.size) assert.equal end
+  ["alpha" "alpine" "beta"] (s BurstSet.keys) assert.equal end
+  ["alpha" "alpine"] (s "alp" BurstSet.with-prefix) assert.equal end
+  "alpha" (s "alphabet" BurstSet.longest-prefix) assert.equal end
+  def s2 (s "alpha" BurstSet.delete)
+  false (s2 "alpha"  BurstSet.has) assert.equal end
+  true  (s2 "alpine" BurstSet.has) assert.equal end
 ] "burst-set" test.test end
 
 
 # --- construction from data (round-trips keys / entries) ------------
 
 [
-  def t ((((BurstSet.make end) "b" BurstSet.add end) "a" BurstSet.add end) "ab" BurstSet.add end)
-  def t2 ((t BurstSet.keys end) BurstSet.from-keys end)
-  (t BurstSet.keys end) (t2 BurstSet.keys end) assert.equal end
-  def m (((BurstMap.make end) "x" 1 BurstMap.set end) "y" "do" BurstMap.set end)
-  def m2 ((m BurstMap.entries end) BurstMap.from-entries end)
-  (m BurstMap.entries end) (m2 BurstMap.entries end) assert.equal end
-  "do" (m2 "y" BurstMap.get end) assert.equal end
+  def t ((((BurstSet.make) "b" BurstSet.add) "a" BurstSet.add) "ab" BurstSet.add)
+  def t2 ((t BurstSet.keys) BurstSet.from-keys)
+  (t BurstSet.keys) (t2 BurstSet.keys) assert.equal end
+  def m (((BurstMap.make) "x" 1 BurstMap.set) "y" "do" BurstMap.set)
+  def m2 ((m BurstMap.entries) BurstMap.from-entries)
+  (m BurstMap.entries) (m2 BurstMap.entries) assert.equal end
+  "do" (m2 "y" BurstMap.get) assert.equal end
 ] "burstset-from-data" test.test end
 
 

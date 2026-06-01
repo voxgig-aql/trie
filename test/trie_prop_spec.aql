@@ -34,7 +34,7 @@ def starts-with fn [
 # Build a TrieSet from a list of keys.
 def set-of fn [
   [keys:List] [Map] [
-    (TrieSet.make end) keys [
+    (TrieSet.make) keys [
       var [[k acc] acc k TrieSet.add end ]
     ] fold
   ]
@@ -82,14 +82,14 @@ def specs [
   (test.prop "add-then-has"
     [ r.string charset (r.int 1 12) ]
     [ var [[key]
-        def s ((TrieSet.make end) key TrieSet.add end)
-        (s key TrieSet.has end)
+        def s ((TrieSet.make) key TrieSet.add)
+        (s key TrieSet.has)
     ] ])
 
   # 2. empty set contains nothing.
   (test.prop "empty-has-nothing"
     [ r.string charset (r.int 1 12) ]
-    [ var [[key] ((TrieSet.make end) key TrieSet.has end) not ] ])
+    [ var [[key] ((TrieSet.make) key TrieSet.has) not ] ])
 
   # 3. set then get returns exactly the value stored.
   (test.prop "set-then-get"
@@ -97,8 +97,8 @@ def specs [
     [ var [[in]
         def k (in "k" get)
         def v (in "v" get)
-        def t ((TrieMap.make end) k v TrieMap.set end)
-        (t k TrieMap.get end) v eq
+        def t ((TrieMap.make) k v TrieMap.set)
+        (t k TrieMap.get) v eq
     ] ])
 
   # 4. every inserted key is present afterwards (bulk no-false-negatives).
@@ -115,7 +115,7 @@ def specs [
     [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 1 15) ]
     [ var [[keys]
         def s (keys set-of)
-        (s TrieSet.size end) (keys size) lte
+        (s TrieSet.size) (keys size) lte
     ] ])
 
   # 6. prefix soundness: everything keys-with-prefix returns really does
@@ -125,7 +125,7 @@ def specs [
     [ var [[keys]
         def s (keys set-of)
         def p (keys get 0)
-        def hits (s p TrieSet.with-prefix end)
+        def hits (s p TrieSet.with-prefix)
         hits p all-have-prefix
     ] ])
 
@@ -135,10 +135,10 @@ def specs [
     [ var [[keys]
         def s (keys set-of)
         def k (keys get 0)
-        def before (s TrieSet.size end)
-        def s2 (s k TrieSet.delete end)
-        def gone ((s2 k TrieSet.has end) not)
-        def smaller ((s2 TrieSet.size end) (before 1 sub) eq)
+        def before (s TrieSet.size)
+        def s2 (s k TrieSet.delete)
+        def gone ((s2 k TrieSet.has) not)
+        def smaller ((s2 TrieSet.size) (before 1 sub) eq)
         gone smaller and
     ] ])
 
@@ -148,7 +148,7 @@ def specs [
     [ r.list-of [ r.string charset (r.int 1 6) ] (r.int 1 12) ]
     [ var [[keys]
         def s (keys set-of)
-        def hits (s (keys get 0) 2 TrieSet.within end)
+        def hits (s (keys get 0) 2 TrieSet.within)
         hits s all-members
     ] ])
 
@@ -158,7 +158,7 @@ def specs [
     [ var [[keys]
         def s (keys set-of)
         def q (keys get 0)
-        def z (s q 0 TrieSet.within end)
+        def z (s q 0 TrieSet.within)
         z ([] q push) list-eq
     ] ])
 
@@ -168,7 +168,7 @@ def specs [
     [ var [[keys]
         def s (keys set-of)
         def pat ([ (keys get 0) "*" ] concat)
-        def hits (s pat TrieSet.match end)
+        def hits (s pat TrieSet.match)
         hits s all-members
     ] ])
 
@@ -176,8 +176,8 @@ def specs [
   (test.prop "from-keys-roundtrip"
     [ r.list-of [ r.string charset (r.int 1 6) ] (r.int 1 12) ]
     [ var [[keys]
-        def viaadd  ((keys set-of) TrieSet.keys end)
-        def viafrom ((keys TrieSet.from-keys end) TrieSet.keys end)
+        def viaadd  ((keys set-of) TrieSet.keys)
+        def viafrom ((keys TrieSet.from-keys) TrieSet.keys)
         viaadd viafrom list-eq
     ] ])
 
@@ -185,7 +185,7 @@ def specs [
 
 
 def _ (specs each [
-  var [[s] (s test.run-property end) report 0 ]
+  var [[s] (s test.run-property) report 0 ]
 ])
 
 

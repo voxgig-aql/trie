@@ -4,8 +4,9 @@
   "aql_ref": "b6617dd",
   "description": "Prefix-tree (trie) utilities for AQL: four variants, each as a Set and a Map.",
   "conventions": {
-    "import": "forward form, no terminator: import \"./trie.aql\" (not \"./trie.aql\" import end)",
-    "call": "trie words are receiver-first and terminated: t key value Map.set end (or wrap in parens); prefer forward arguments for words that take them directly",
+    "import": "forward form, no terminator: import \"./trie.aql\"",
+    "call": "trie words are receiver-first (t key value Map.set) so results pipe; forward arguments have precedence and a call resolves at the next function word or paren, so a terminator is usually unnecessary",
+    "disambiguation": "only when a bare type-compatible literal immediately follows a stack-form call: use parens, a trailing `end`, or the `/s` modifier (force stack) e.g. `5 5 cmp/s 9`",
     "immutable": "add/set/delete return a NEW trie; rebind the result",
     "outputs_sorted": "keys, values, entries, with-prefix, keys-with-prefix return sorted keys",
     "absent": "get returns none, has returns false for absent keys (never an error)",

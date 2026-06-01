@@ -33,18 +33,25 @@ Each module is self-contained — vendor only the variant(s) you use.
 
 ## Calling convention (read this first)
 
-- **Prefer forward arguments.** When a word takes its arguments directly after
-  it, write them that way and skip the terminator: `import "./trie.aql"`, not
-  `"./trie.aql" import end`.
-- **Receiver first for the trie words:** `t key value TrieMap.set end`. These
-  namespace calls look ahead for arguments, so **terminate them** with `end`
-  (or wrap in parens) — otherwise the word swallows the next token.
-  `(t "x" TrieSet.has)` and `t "x" TrieSet.has end` are equivalent.
+- **Forward arguments have precedence.** A word grabs the tokens *after* it as
+  arguments, stops at the next function word or a closing paren, and otherwise
+  takes what it needs from the stack. So a terminator is usually unnecessary:
+  `import "./trie.aql"`, `(t "x" TrieSet.has)`, and `t "x" TrieSet.has print`
+  all resolve on their own.
+- **Receiver first for the trie words** — a convention that makes results pipe:
+  `t key value TrieMap.set`. Each `add`/`set`/`delete` returns a new trie, so
+  the receiver threads through chains and folds.
+- **Disambiguate only when a bare literal follows a call.** If a type-compatible
+  literal sits immediately after a stack-form call with no word or paren
+  between, forward-precedence will consume it. Resolve it with parens, a
+  trailing `end`, or the **`/s` modifier**, which pins that call to stack args:
+  `5 5 cmp/s 9` compares `5` and `5` (leaving `9`), whereas `5 5 cmp 9`
+  forward-grabs the `9`.
 - **Tries are immutable.** `add` / `set` / `delete` return a *new* trie and
   leave the input unchanged — **always rebind the result**:
 
   ```aql
-  def t1 (t0 "cat" TrieSet.add end)   # t0 is unchanged; use t1
+  def t1 (t0 "cat" TrieSet.add)   # t0 is unchanged; use t1
   ```
 
 ---
@@ -72,36 +79,36 @@ import "./trie.aql"
 # fold runs `init list [body] fold`; the body gets each key `w` and the
 # accumulator `acc`, and returns the next trie.
 def words ["apple" "app" "apply" "banana"]
-def s ((TrieSet.make end) words [ var [[w acc] acc w TrieSet.add end ] ] fold)
+def s ((TrieSet.make) words [ var [[w acc] acc w TrieSet.add end ] ] fold)
 
 # Membership.
-(s "app" TrieSet.has end) print            # => true
-(s "ap"  TrieSet.has end) print             # => false  (a prefix is not a member)
+(s "app" TrieSet.has) print            # => true
+(s "ap"  TrieSet.has) print             # => false  (a prefix is not a member)
 
 # Autocomplete: every key under a prefix, sorted.
-(s "app" TrieSet.with-prefix end) print     # => ["app", "apple", "apply"]
+(s "app" TrieSet.with-prefix) print     # => ["app", "apple", "apply"]
 
 # Longest stored key that prefixes a query.
-(s "applesauce" TrieSet.longest-prefix end) print   # => "apple"
+(s "applesauce" TrieSet.longest-prefix) print   # => "apple"
 
 # Delete (rebind; keys below the deleted one survive).
-def s2 (s "app" TrieSet.delete end)
-(s2 "app"   TrieSet.has end) print           # => false
-(s2 "apple" TrieSet.has end) print           # => true
+def s2 (s "app" TrieSet.delete)
+(s2 "app"   TrieSet.has) print           # => false
+(s2 "apple" TrieSet.has) print           # => true
 
 # Map: bind values (any type) to keys.
-def m (((TrieMap.make end) "GET" 1 TrieMap.set end) "POST" 2 TrieMap.set end)
-(m "GET"    TrieMap.get end) print           # => 1
-(m "DELETE" TrieMap.get end) print           # => None  (absent — not an error)
-(m TrieMap.entries end) print                # => [["GET" 1] ["POST" 2]]  (sorted)
+def m (((TrieMap.make) "GET" 1 TrieMap.set) "POST" 2 TrieMap.set)
+(m "GET"    TrieMap.get) print           # => 1
+(m "DELETE" TrieMap.get) print           # => None  (absent — not an error)
+(m TrieMap.entries) print                # => [["GET" 1] ["POST" 2]]  (sorted)
 
 # Fuzzy (edit-distance) and wildcard search — STANDARD TRIE ONLY.
-(s "aple" 1 TrieSet.within end) print        # keys within Levenshtein distance 1
-(s "ap*"  TrieSet.match end) print            # `?` = one char, `*` = any run
+(s "aple" 1 TrieSet.within) print        # keys within Levenshtein distance 1
+(s "ap*"  TrieSet.match) print            # `?` = one char, `*` = any run
 
 # Persist + rebuild (there is no string `decode`).
-def snapshot (m TrieMap.entries end)         # serialize these however you like
-def m2 (snapshot TrieMap.from-entries end)   # …and rebuild later  (sets: keys + from-keys)
+def snapshot (m TrieMap.entries)         # serialize these however you like
+def m2 (snapshot TrieMap.from-entries)   # …and rebuild later  (sets: keys + from-keys)
 ```
 
 ---
@@ -129,10 +136,11 @@ Exact call-forms, arg order, and return types: `api.json` (structured) and
 ## Rules the agent MUST follow
 
 1. **Rebind** the result of `add`/`set`/`delete` — tries never mutate in place.
-2. **Receiver-first** argument order for the trie words: `t key value Map.set
-   end`, and **terminate** these calls with `end` or parens.
-3. **Prefer forward arguments** for words that take them directly — write
-   `import "./trie.aql"`, not `"./trie.aql" import end`.
+2. **Receiver-first** argument order for the trie words: `t key value Map.set`
+   (a convention so results pipe through chains and folds).
+3. **Forward args have precedence**; a call resolves at the next function word
+   or paren. Add parens, `end`, or `/s` (force stack) only to stop a bare
+   following literal from being grabbed as an argument.
 4. `keys`, `values`, `entries`, `with-prefix`, `keys-with-prefix` are **sorted**.
 5. `get` returns `none` and `has` returns `false` for an absent key — never an
    error. Use `has` to tell "absent" from "present with value `none`".

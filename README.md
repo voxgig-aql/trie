@@ -9,11 +9,11 @@ values — in four classic flavours.
 ```aql
 import "./trie.aql"
 
-def t (((TrieSet.make end) "cat" TrieSet.add end) "car" TrieSet.add end)
+def t (((TrieSet.make) "cat" TrieSet.add) "car" TrieSet.add)
 
-(t "car" TrieSet.has end)            print   # => true
-(t "ca"  TrieSet.with-prefix end)    print   # => ["car", "cat"]
-(t "cartoon" TrieSet.longest-prefix end) print  # => "car"
+(t "car" TrieSet.has)            print   # => true
+(t "ca"  TrieSet.with-prefix)    print   # => ["car", "cat"]
+(t "cartoon" TrieSet.longest-prefix) print  # => "car"
 ```
 
 ## The four variants
@@ -55,9 +55,10 @@ The standard trie additionally offers two **advanced queries**:
 `t pattern TrieSet.match` (wildcard search, `?` = one char, `*` = any run).
 
 Tries are **persistent (immutable)**: every `add`/`set`/`delete` returns
-a *new* trie and leaves the input untouched. Every call ends with `end`
-(or is wrapped in parens) — standard AQL forward-dispatch. Full details
-and the calling convention are in the [Reference](docs/reference.md).
+a *new* trie and leaves the input untouched. Calls use AQL's
+forward-dispatch — arguments follow the receiver and resolve at the next
+word or paren, so an explicit `end` is rarely needed. Full details and the
+calling convention are in the [Reference](docs/reference.md).
 
 ## Documentation
 

@@ -11,11 +11,11 @@ import "./tst.aql"
 
 def fixture fn [
   [] [Any] [
-    ((((( TstMap.make end)
-      "cat"  1 TstMap.set end)
-      "car"  2 TstMap.set end)
-      "card" 3 TstMap.set end)
-      "dog"  4 TstMap.set end)
+    ((((( TstMap.make)
+      "cat"  1 TstMap.set)
+      "car"  2 TstMap.set)
+      "card" 3 TstMap.set)
+      "dog"  4 TstMap.set)
   ]
 ]
 
@@ -23,12 +23,12 @@ def fixture fn [
 # --- empty (an empty TST is `none`) ---------------------------------
 
 [
-  def t (TstMap.make end)
+  def t (TstMap.make)
   none  t                               assert.equal end
-  0     (t TstMap.size end)             assert.equal end
-  false (t "anything" TstMap.has end)   assert.equal end
-  none  (t "anything" TstMap.get end)   assert.equal end
-  []    (t TstMap.keys end)             assert.equal end
+  0     (t TstMap.size)             assert.equal end
+  false (t "anything" TstMap.has)   assert.equal end
+  none  (t "anything" TstMap.get)   assert.equal end
+  []    (t TstMap.keys)             assert.equal end
 ] "tst-empty" test.test end
 
 
@@ -36,12 +36,12 @@ def fixture fn [
 
 [
   def t (fixture)
-  1 (t "cat"  TstMap.get end) assert.equal end
-  2 (t "car"  TstMap.get end) assert.equal end
-  3 (t "card" TstMap.get end) assert.equal end
-  4 (t "dog"  TstMap.get end) assert.equal end
-  false (t "ca" TstMap.has end) assert.equal end
-  none  (t "ca" TstMap.get end) assert.equal end
+  1 (t "cat"  TstMap.get) assert.equal end
+  2 (t "car"  TstMap.get) assert.equal end
+  3 (t "card" TstMap.get) assert.equal end
+  4 (t "dog"  TstMap.get) assert.equal end
+  false (t "ca" TstMap.has) assert.equal end
+  none  (t "ca" TstMap.get) assert.equal end
 ] "tst-set-get" test.test end
 
 
@@ -49,9 +49,9 @@ def fixture fn [
 
 [
   def t  (fixture)
-  def t2 (t "cat" 99 TstMap.set end)
-  99 (t2 "cat" TstMap.get end) assert.equal end
-  1  (t  "cat" TstMap.get end) assert.equal end
+  def t2 (t "cat" 99 TstMap.set)
+  99 (t2 "cat" TstMap.get) assert.equal end
+  1  (t  "cat" TstMap.get) assert.equal end
 ] "tst-overwrite" test.test end
 
 
@@ -59,8 +59,8 @@ def fixture fn [
 
 [
   def t (fixture)
-  4 (t TstMap.size end) assert.equal end
-  ["car" "card" "cat" "dog"] (t TstMap.keys end) assert.equal end
+  4 (t TstMap.size) assert.equal end
+  ["car" "card" "cat" "dog"] (t TstMap.keys) assert.equal end
 ] "tst-stats" test.test end
 
 
@@ -68,10 +68,10 @@ def fixture fn [
 
 [
   def t (fixture)
-  ["car" "card" "cat"] (t "ca" TstMap.keys-with-prefix end) assert.equal end
-  ["card"]             (t "card" TstMap.keys-with-prefix end) assert.equal end
-  []                   (t "z" TstMap.keys-with-prefix end) assert.equal end
-  ["car" "card" "cat" "dog"] (t "" TstMap.keys-with-prefix end) assert.equal end
+  ["car" "card" "cat"] (t "ca" TstMap.keys-with-prefix) assert.equal end
+  ["card"]             (t "card" TstMap.keys-with-prefix) assert.equal end
+  []                   (t "z" TstMap.keys-with-prefix) assert.equal end
+  ["car" "card" "cat" "dog"] (t "" TstMap.keys-with-prefix) assert.equal end
 ] "tst-prefix" test.test end
 
 
@@ -79,10 +79,10 @@ def fixture fn [
 
 [
   def t (fixture)
-  "card" (t "cardiff" TstMap.longest-prefix end) assert.equal end
-  "car"  (t "carrot"  TstMap.longest-prefix end) assert.equal end
-  "cat"  (t "cat"     TstMap.longest-prefix end) assert.equal end
-  none   (t "zebra"   TstMap.longest-prefix end) assert.equal end
+  "card" (t "cardiff" TstMap.longest-prefix) assert.equal end
+  "car"  (t "carrot"  TstMap.longest-prefix) assert.equal end
+  "cat"  (t "cat"     TstMap.longest-prefix) assert.equal end
+  none   (t "zebra"   TstMap.longest-prefix) assert.equal end
 ] "tst-longest-prefix" test.test end
 
 
@@ -90,64 +90,64 @@ def fixture fn [
 
 [
   def t  (fixture)
-  def t2 (t "car" TstMap.delete end)
-  false (t2 "car"  TstMap.has end) assert.equal end
-  true  (t2 "card" TstMap.has end) assert.equal end
-  true  (t2 "cat"  TstMap.has end) assert.equal end
-  3     (t2 TstMap.size end) assert.equal end
+  def t2 (t "car" TstMap.delete)
+  false (t2 "car"  TstMap.has) assert.equal end
+  true  (t2 "card" TstMap.has) assert.equal end
+  true  (t2 "cat"  TstMap.has) assert.equal end
+  3     (t2 TstMap.size) assert.equal end
   # deleting an absent key is a no-op
-  def t3 (t2 "nope" TstMap.delete end)
-  3     (t3 TstMap.size end) assert.equal end
+  def t3 (t2 "nope" TstMap.delete)
+  3     (t3 TstMap.size) assert.equal end
   # delete every key ends back at an empty tree
   def e0 (fixture)
-  def e1 (e0 "cat"  TstMap.delete end)
-  def e2 (e1 "car"  TstMap.delete end)
-  def e3 (e2 "card" TstMap.delete end)
-  def e4 (e3 "dog"  TstMap.delete end)
-  0 (e4 TstMap.size end) assert.equal end
+  def e1 (e0 "cat"  TstMap.delete)
+  def e2 (e1 "car"  TstMap.delete)
+  def e3 (e2 "card" TstMap.delete)
+  def e4 (e3 "dog"  TstMap.delete)
+  0 (e4 TstMap.size) assert.equal end
 ] "tst-delete" test.test end
 
 
 # --- entries + values + reserved-word values ------------------------
 
 [
-  def t (((TstMap.make end) "a" 10 TstMap.set end) "ab" "do" TstMap.set end)
-  [["a" 10] ["ab" "do"]] (t TstMap.entries end) assert.equal end
-  [10 "do"]              (t TstMap.values  end) assert.equal end
-  "do" (t "ab" TstMap.get end) assert.equal end
+  def t (((TstMap.make) "a" 10 TstMap.set) "ab" "do" TstMap.set)
+  [["a" 10] ["ab" "do"]] (t TstMap.entries) assert.equal end
+  [10 "do"]              (t TstMap.values) assert.equal end
+  "do" (t "ab" TstMap.get) assert.equal end
 ] "tst-entries" test.test end
 
 
 # --- TstSet ----------------------------------------------------------
 
 [
-  def s ((((TstSet.make end)
-    "in"   TstSet.add end)
-    "inn"  TstSet.add end)
-    "tin"  TstSet.add end)
-  true  (s "in"  TstSet.has end) assert.equal end
-  true  (s "inn" TstSet.has end) assert.equal end
-  false (s "i"   TstSet.has end) assert.equal end
-  3     (s TstSet.size end) assert.equal end
-  ["in" "inn" "tin"] (s TstSet.keys end) assert.equal end
-  ["in" "inn"] (s "in" TstSet.with-prefix end) assert.equal end
-  "inn" (s "innings" TstSet.longest-prefix end) assert.equal end
-  def s2 (s "in" TstSet.delete end)
-  false (s2 "in"  TstSet.has end) assert.equal end
-  true  (s2 "inn" TstSet.has end) assert.equal end
+  def s ((((TstSet.make)
+    "in"   TstSet.add)
+    "inn"  TstSet.add)
+    "tin"  TstSet.add)
+  true  (s "in"  TstSet.has) assert.equal end
+  true  (s "inn" TstSet.has) assert.equal end
+  false (s "i"   TstSet.has) assert.equal end
+  3     (s TstSet.size) assert.equal end
+  ["in" "inn" "tin"] (s TstSet.keys) assert.equal end
+  ["in" "inn"] (s "in" TstSet.with-prefix) assert.equal end
+  "inn" (s "innings" TstSet.longest-prefix) assert.equal end
+  def s2 (s "in" TstSet.delete)
+  false (s2 "in"  TstSet.has) assert.equal end
+  true  (s2 "inn" TstSet.has) assert.equal end
 ] "tst-set" test.test end
 
 
 # --- construction from data (round-trips keys / entries) ------------
 
 [
-  def t ((((TstSet.make end) "b" TstSet.add end) "a" TstSet.add end) "ab" TstSet.add end)
-  def t2 ((t TstSet.keys end) TstSet.from-keys end)
-  (t TstSet.keys end) (t2 TstSet.keys end) assert.equal end
-  def m (((TstMap.make end) "x" 1 TstMap.set end) "y" "do" TstMap.set end)
-  def m2 ((m TstMap.entries end) TstMap.from-entries end)
-  (m TstMap.entries end) (m2 TstMap.entries end) assert.equal end
-  "do" (m2 "y" TstMap.get end) assert.equal end
+  def t ((((TstSet.make) "b" TstSet.add) "a" TstSet.add) "ab" TstSet.add)
+  def t2 ((t TstSet.keys) TstSet.from-keys)
+  (t TstSet.keys) (t2 TstSet.keys) assert.equal end
+  def m (((TstMap.make) "x" 1 TstMap.set) "y" "do" TstMap.set)
+  def m2 ((m TstMap.entries) TstMap.from-entries)
+  (m TstMap.entries) (m2 TstMap.entries) assert.equal end
+  "do" (m2 "y" TstMap.get) assert.equal end
 ] "tstset-from-data" test.test end
 
 

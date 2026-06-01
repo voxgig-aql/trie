@@ -27,7 +27,7 @@ def charset "abcdefghijklmnopqrstuvwxyz"
 # Build a TrieMap binding each generated key to itself.
 def map-of fn [
   [keys:List] [Map] [
-    (TrieMap.make end) keys [
+    (TrieMap.make) keys [
       var [[k acc] acc k k TrieMap.set end ]
     ] fold
   ]
@@ -52,7 +52,7 @@ test.check-prop "no-false-negatives"
   [r.string charset 8]
   [
     var [[s]
-      def t ((TrieSet.make end) s TrieSet.add end)
+      def t ((TrieSet.make) s TrieSet.add)
       t s TrieSet.has end
     ]
   ]
@@ -66,8 +66,8 @@ test.check-prop "set-get-roundtrip"
   [r.string charset 8]
   [
     var [[s]
-      def t ((TrieMap.make end) s 42 TrieMap.set end)
-      (t s TrieMap.get end) 42 eq
+      def t ((TrieMap.make) s 42 TrieMap.set)
+      (t s TrieMap.get) 42 eq
     ]
   ]
   20 1 0
@@ -81,9 +81,9 @@ test.check-prop "keys-sorted-and-counted"
   [
     var [[keys]
       def t (keys map-of)
-      def ks (t TrieMap.keys end)
+      def ks (t TrieMap.keys)
       def s1 ((ks sort) ks list-eq)
-      def s2 ((ks size) (t TrieMap.size end) eq)
+      def s2 ((ks size) (t TrieMap.size) eq)
       def s3 ((ks array.unique size) (ks size) eq)
       s1 s2 and s3 and
     ]
@@ -101,8 +101,8 @@ test.check-prop "longest-prefix-valid"
       # store three nested prefixes of s
       def k1 (s slice 0 2)
       def k2 (s slice 0 5)
-      def t (((TrieSet.make end) k1 TrieSet.add end) k2 TrieSet.add end)
-      def lp (t s TrieSet.longest-prefix end)
+      def t (((TrieSet.make) k1 TrieSet.add) k2 TrieSet.add)
+      def lp (t s TrieSet.longest-prefix)
       # the longest stored prefix of a 10-char s is k2 (5 chars)
       lp k2 eq
     ]
@@ -119,14 +119,14 @@ test.check-prop "delete-target-only"
     var [[keys]
       def t (keys map-of)
       def k (keys get 0)
-      def t2 (t k TrieMap.delete end)
-      def gone ((t2 k TrieMap.has end) not)
+      def t2 (t k TrieMap.delete)
+      def gone ((t2 k TrieMap.has) not)
       # any other distinct key is still present
       def others (keys array.unique)
       def survived (others each [
         var [[o] if (o k eq) [true] [t2 o TrieMap.has end] ]
       ])
-      def allsurv (survived all end)
+      def allsurv (survived all)
       gone allsurv and
     ]
   ]
@@ -141,8 +141,8 @@ test.check-prop "encode-has-size"
   [
     var [[keys]
       def t (keys map-of)
-      def enc (t TrieMap.encode end)
-      def n (t TrieMap.size end)
+      def enc (t TrieMap.encode)
+      def n (t TrieMap.size)
       `size:${n}` enc indexof 0 gte
     ]
   ]
@@ -154,7 +154,7 @@ end
 
 "---" print
 "results:" print
-def all-results (test.results end)
+def all-results (test.results)
 def _print-results (all-results each [
   var [[r]
     def nm (r "name" get)
@@ -163,5 +163,5 @@ def _print-results (all-results each [
     0
   ]
 ])
-"fail count: " print (test.fail-count end) print
-0 (test.fail-count end) assert.equal end
+"fail count: " print (test.fail-count) print
+0 (test.fail-count) assert.equal end

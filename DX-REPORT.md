@@ -153,9 +153,17 @@ it.
 - **`filter` wants a `Function`, not a `[…]` quotation**, unlike `each`
   /`fold` which happily take a bracket body. I used `fold` everywhere
   instead.
-- **User-defined words need `end`/parens when another token follows.** A
-  bare `… my-fn ]` at the end of a block reads the `]`; `(… my-fn)` fixes
-  it. Easy once learned, but the failure is a confusing signature error.
+- **Forward arguments have precedence — by design (I misjudged this).** A word
+  collects the tokens *after* it as arguments, stopping at the next function
+  word or a closing paren, and otherwise falls back to the stack. So a
+  terminator is rarely needed: `(… my-fn)`, `… my-fn next-word`, and
+  `import "x"` all resolve on their own. The only case that needs
+  disambiguation is when a bare, type-compatible **literal** immediately
+  follows a stack-form call — then use parens, `end`, or the **`/s`** modifier,
+  which pins the call to stack args (`5 5 cmp/s 9` → compares `5` and `5`,
+  leaves `9`; `5 5 cmp 9` → forward-grabs `9`). My first draft of this report
+  overstated it as "every call needs `end`"; it does not — that was my error,
+  not a language wart.
 - **`if` is safe all-forward.** I kept every `if cond [then] [else]` with
   the condition and branches all forward of the word; the mixed form is the
   one to avoid.

@@ -14,45 +14,45 @@ import "./burst.aql"
 
 def words ["cat" "car" "card" "cart" "dog"]
 
-def tm ((TrieMap.make end) words [ var [[w acc] acc w (w size) TrieMap.set end ] ] fold)
+def tm ((TrieMap.make) words [ var [[w acc] acc w (w size) TrieMap.set end ] ] fold)
 
 "" print
-"TrieMap keys:        " print (tm TrieMap.keys end) print
-"TrieMap get 'card':  " print (tm "card" TrieMap.get end) print
-"TrieMap prefix 'car':" print (tm "car" TrieMap.keys-with-prefix end) print
-"TrieMap longest of 'cartoon':" print (tm "cartoon" TrieMap.longest-prefix end) print
-"TrieMap size/height: " print `${(tm TrieMap.size end)} / ${(tm TrieMap.height end)}` print
+"TrieMap keys:        " print (tm TrieMap.keys) print
+"TrieMap get 'card':  " print (tm "card" TrieMap.get) print
+"TrieMap prefix 'car':" print (tm "car" TrieMap.keys-with-prefix) print
+"TrieMap longest of 'cartoon':" print (tm "cartoon" TrieMap.longest-prefix) print
+"TrieMap size/height: " print `${(tm TrieMap.size)} / ${(tm TrieMap.height)}` print
 
 
 # --- RadixSet: the compressed variant, used as a set ----------------
 
-def rs (((((RadixSet.make end)
-  "romane"  RadixSet.add end)
-  "romanus" RadixSet.add end)
-  "romulus" RadixSet.add end)
-  "rubens"  RadixSet.add end)
+def rs (((((RadixSet.make)
+  "romane"  RadixSet.add)
+  "romanus" RadixSet.add)
+  "romulus" RadixSet.add)
+  "rubens"  RadixSet.add)
 
 "" print
-"RadixSet keys:       " print (rs RadixSet.keys end) print
-"RadixSet has 'roman':" print (rs "roman" RadixSet.has end) print
-"RadixSet prefix 'rom':" print (rs "rom" RadixSet.with-prefix end) print
+"RadixSet keys:       " print (rs RadixSet.keys) print
+"RadixSet has 'roman':" print (rs "roman" RadixSet.has) print
+"RadixSet prefix 'rom':" print (rs "rom" RadixSet.with-prefix) print
 
 
 # --- TstSet: ternary search tree ------------------------------------
 
-def ts ((((TstSet.make end)
-  "in"  TstSet.add end)
-  "inn" TstSet.add end)
-  "tin" TstSet.add end)
+def ts ((((TstSet.make)
+  "in"  TstSet.add)
+  "inn" TstSet.add)
+  "tin" TstSet.add)
 
 "" print
-"TstSet keys:         " print (ts TstSet.keys end) print
-"TstSet longest 'innings':" print (ts "innings" TstSet.longest-prefix end) print
+"TstSet keys:         " print (ts TstSet.keys) print
+"TstSet longest 'innings':" print (ts "innings" TstSet.longest-prefix) print
 
 
 # --- BurstMap: burst trie, exercised past its burst limit -----------
 
-def bm ((BurstMap.make end) (iota 20) [
+def bm ((BurstMap.make) (iota 20) [
   var [[i acc]
     def k ([ "item-" (convert String i) ] concat)
     acc k i BurstMap.set end
@@ -60,7 +60,7 @@ def bm ((BurstMap.make end) (iota 20) [
 ] fold)
 
 "" print
-"BurstMap size:       " print (bm BurstMap.size end) print
-"BurstMap get 'item-7':" print (bm "item-7" BurstMap.get end) print
-"BurstMap prefix 'item-1':" print (bm "item-1" BurstMap.keys-with-prefix end) print
-"BurstMap encode:     " print (bm BurstMap.encode end) print
+"BurstMap size:       " print (bm BurstMap.size) print
+"BurstMap get 'item-7':" print (bm "item-7" BurstMap.get) print
+"BurstMap prefix 'item-1':" print (bm "item-1" BurstMap.keys-with-prefix) print
+"BurstMap encode:     " print (bm BurstMap.encode) print
