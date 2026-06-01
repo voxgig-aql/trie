@@ -71,6 +71,10 @@ modes, each serving a different need:
 | 📖 | **[Reference](docs/reference.md)** | look up exact words, signatures, and return types |
 | 💡 | **[Explanation](docs/explanation.md)** | understand how each variant works and why it's built this way |
 
+**For AI coding agents:** start with [`CLAUDE.md`](CLAUDE.md) (also available as
+[`AGENTS.md`](AGENTS.md)) — a compact guide to importing, calling, and the AQL
+foot-guns to avoid. A machine-readable API manifest is in [`api.json`](api.json).
+
 New here? Start with the [Tutorial](docs/tutorial.md). Just want the API?
 Jump to the [Reference](docs/reference.md).
 
