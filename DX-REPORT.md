@@ -175,6 +175,89 @@ it.
 
 ---
 
+## Case study: what would it take to make a HAMT worthwhile?
+
+When the brief asked for four variants, I implemented a **burst trie** for
+the fourth and explicitly declined a **HAMT** (hash array-mapped trie). It
+is worth recording *why*, because the answer is more nuanced than "AQL
+can't do it" and it points at a few concrete language gaps. (The facts
+below were confirmed against the source and quick probes at `b6617dd`; I
+did not build a HAMT end to end, so the "only blocker" claim in Level A is
+a strong inference, not an executed result.)
+
+A HAMT keeps each node's present children in a small **packed array** and
+uses a per-node integer **bitmap** to say which of (say) 32 slots are
+occupied; the slot's position in the packed array is
+`popcount(bitmap & (bit − 1))`. Its whole reason to exist — over a
+balanced tree, a sorted trie, or a plain hash map — is *performance from
+memory layout*: a contiguous, O(1)-indexed array that is cheap to copy
+(≤32 slots) for persistence or mutate in place for bulk builds.
+
+Crucially, a HAMT indexes children by an integer **slot**, not by a
+dynamic string key. So it sidesteps the limitation that shaped every other
+variant here (AQL can't build maps with computed keys, and `refine Object`
+fields aren't enumerable) — integer-indexed `List`s cover it. That makes
+the HAMT *more* expressible in AQL than I first assumed. The question
+splits cleanly into two levels.
+
+### Level A — to express a *correct, persistent* HAMT
+
+Already present and sufficient: the full bitwise suite (`band` `bor`
+`bxor` `bnot` `bsl` `bsr` `busr`), integers wide enough to mask, hashing to
+a fixed-width integer (`bin.fnv32` / `bin.fnv64`), O(1) list indexing
+(`get`), and structural sharing via copy-returning ops. Bit-slicing a hash
+(`(h bsr 5) band 31`) works directly.
+
+Missing or awkward, but minor:
+
+1. **`popcount`** — the one genuinely absent primitive, and the core of the
+   slot-indexing trick. It is implementable in user code (a SWAR sequence
+   with the existing bitwise/multiply words, or a ≤64-step loop), so it is
+   a convenience rather than a blocker — but a native `popcount` is the
+   single highest-leverage addition.
+2. **`insert-at` / `remove-at` for lists** — to grow or shrink the packed
+   child array by one slot. Today you compose `take`/`concat`/`shed`; a
+   primitive is cleaner and avoids the O(n) rebuild.
+3. **Defined fixed-width *unsigned* integer semantics** (a `u32`/`u64`, or
+   documented shift/wrap behaviour). The bitmap depends on well-defined
+   shifts and no sign surprises at bit 31/63. Manual masking works but is a
+   foot-gun.
+
+With just `popcount` (or its in-language equivalent) a correct persistent
+HAMT is writable today.
+
+### Level B — to make a HAMT actually *pay off*
+
+This is the real answer, and none of it is surface syntax. An interpreted,
+GC'd, value-semantics language cannot deliver a HAMT's performance
+advantage without:
+
+1. **Mutable, fixed-width, unboxed arrays** with an in-place O(1)
+   `set`/`insert` contract. AQL has indexed `set` *only* on the separate
+   `Array` type, not on plain `List`s (`[10 20 30]` is a `List` and `set`
+   rejects it), and the mutation-vs-copy contract isn't exposed. This is
+   what enables the *transient* fast path (à la Clojure) that makes bulk
+   construction competitive.
+2. **Layout guarantees** — contiguous packed storage and unboxed small ints
+   for the bitmap — for the cache locality that *is* the HAMT's edge over
+   other trees. Boxed values defeat this entirely.
+3. Realistically, **a native persistent-map type in the runtime**
+   (HAMT/CHAMP-backed), the way Clojure, Scala, and Erlang ship one. Then
+   `make`/`get`/`set`/`merge` over a large map become O(log₃₂ n) with
+   structural sharing and user code never touches a bitmap — and, as a
+   bonus, this would also retire AQL's dynamic-key-map limitation.
+
+### Takeaway
+
+For *expressiveness*, add `popcount` (ideally also `insert-at`/`remove-at`
+and unsigned-int clarity) and a HAMT becomes a reasonable pure-AQL
+exercise. For *HAMT-class performance*, that is a runtime decision: ship a
+native persistent map, and/or add mutable unboxed fixed-width arrays with
+transients. The burst trie was the pragmatic stand-in precisely because it
+trades the bitmap-packing trick for flat buckets — and buckets are just
+`List`s, which AQL represents naturally.
+
+
 ## Suggestions, in priority order
 
 1. **Surface silent dispatch failures.** The two costliest bugs (#1, #6)
