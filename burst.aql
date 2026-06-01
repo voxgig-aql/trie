@@ -28,7 +28,7 @@
 # constructor never evaluates a String value that names a word. Trees are
 # PERSISTENT: mutators return a new tree. Paths are assembled with `concat`.
 #
-# Imported via `"./burst.aql" import end`.
+# Imported via `import "./burst.aql"`.
 
 
 # --- boxing + constants ---------------------------------------------

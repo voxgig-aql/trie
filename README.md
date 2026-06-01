@@ -7,7 +7,7 @@ String keys — as either a **set** of keys or a **map** from keys to
 values — in four classic flavours.
 
 ```aql
-"./trie.aql" import end
+import "./trie.aql"
 
 def t (((TrieSet.make end) "cat" TrieSet.add end) "car" TrieSet.add end)
 

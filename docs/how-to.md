@@ -66,7 +66,7 @@ Fold the keys into a fresh trie. Each `add` returns the next trie, so the
 accumulator threads through:
 
 ```aql
-"./trie.aql" import end
+import "./trie.aql"
 
 def words ["apple" "app" "apply" "banana"]
 def t ((TrieSet.make end) words [ var [[w acc] acc w TrieSet.add end ] ] fold)
@@ -115,7 +115,7 @@ def t ((( TrieSet.make end) "car" TrieSet.add end) "card" TrieSet.add end)
 Swap `…Set` for `…Map`, and bind values with `set`:
 
 ```aql
-"./trie.aql" import end
+import "./trie.aql"
 
 def m (((TrieMap.make end) "GET" 1 TrieMap.set end) "POST" 2 TrieMap.set end)
 
@@ -153,9 +153,9 @@ The API is identical across variants, so switching is mechanical: change
 the import and the namespace prefix. From standard to ternary search tree:
 
 ```diff
-- "./trie.aql" import end
+- import "./trie.aql"
 - def t ((TrieSet.make end) "cat" TrieSet.add end)
-+ "./tst.aql" import end
++ import "./tst.aql"
 + def t ((TstSet.make end) "cat" TstSet.add end)
 ```
 
@@ -217,7 +217,7 @@ Import the variant by relative path; you do **not** need to import
 anything else — each module pulls in its own dependencies:
 
 ```aql
-"./radix.aql" import end
+import "./radix.aql"
 def t (RadixSet.make end)
 # … use the RadixSet namespace …
 ```

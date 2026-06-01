@@ -8,9 +8,9 @@
 #   aql test/radix_prop_spec.aql
 
 
-"aql:test"    import end
-"./radix.aql" import end
-"./trie.aql"  import end
+import "aql:test"
+import "./radix.aql"
+import "./trie.aql"
 
 
 def charset "abcdefghijklmnopqrstuvwxyz"

@@ -19,10 +19,10 @@ engine:
 Import the variant you want:
 
 ```aql
-"./trie.aql"  import end
-"./radix.aql" import end
-"./tst.aql"   import end
-"./burst.aql" import end
+import "./trie.aql"
+import "./radix.aql"
+import "./tst.aql"
+import "./burst.aql"
 ```
 
 A consuming script does **not** need to import anything else; each module

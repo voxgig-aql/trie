@@ -16,9 +16,9 @@
 #   aql test/trie_pbt.aql
 
 
-"aql:test"   import end
-"aql:array"  import end
-"./trie.aql" import end
+import "aql:test"
+import "aql:array"
+import "./trie.aql"
 
 
 def charset "abcdefghijklmnopqrstuvwxyz"

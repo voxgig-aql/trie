@@ -32,7 +32,7 @@
 # arguments follow — `t key val TrieMap.set end`. Every call ends with `end`
 # (or is wrapped in parens).
 #
-# Imported via `"./trie.aql" import end`.
+# Imported via `import "./trie.aql"`.
 
 
 # --- node construction ----------------------------------------------

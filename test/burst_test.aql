@@ -4,9 +4,9 @@
 #   aql test/burst_test.aql
 
 
-"aql:test"    import end
-"aql:report"  import end
-"./burst.aql" import end
+import "aql:test"
+import "aql:report"
+import "./burst.aql"
 
 
 def fixture fn [

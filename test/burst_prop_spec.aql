@@ -7,9 +7,9 @@
 #   aql test/burst_prop_spec.aql
 
 
-"aql:test"    import end
-"./burst.aql" import end
-"./trie.aql"  import end
+import "aql:test"
+import "./burst.aql"
+import "./trie.aql"
 
 
 def charset "abcdefghijklmnopqrstuvwxyz"

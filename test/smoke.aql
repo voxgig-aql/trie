@@ -2,10 +2,10 @@
 # the common surface of each, so `aql test/smoke.aql` is a quick end-to-end
 # check that every module loads and answers.
 
-"./trie.aql"  import end
-"./radix.aql" import end
-"./tst.aql"   import end
-"./burst.aql" import end
+import "./trie.aql"
+import "./radix.aql"
+import "./tst.aql"
+import "./burst.aql"
 
 "--- trie utilities smoke demo ---" print
 

@@ -29,7 +29,7 @@
 # TSTs here are PERSISTENT: every mutator returns a new tree, rebuilding the
 # nodes along the edited path. Paths are assembled with `concat`.
 #
-# Imported via `"./tst.aql" import end`.
+# Imported via `import "./tst.aql"`.
 
 
 # --- boxing ---------------------------------------------------------

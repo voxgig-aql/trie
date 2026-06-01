@@ -31,7 +31,7 @@
 # explicit literal constructor — never `merge`, which deep-merges and would
 # fuse sibling edge lists.
 #
-# Imported via `"./radix.aql" import end`.
+# Imported via `import "./radix.aql"`.
 
 
 # --- node construction ----------------------------------------------

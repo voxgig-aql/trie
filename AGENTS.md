@@ -16,15 +16,15 @@ dependencies. Verified against `aql` commit `b6617dd`.
 `tst.aql`, `burst.aql`) into the consumer project, e.g. `lib/trie/`, then:
 
 ```aql
-"./lib/trie/trie.aql" import end
+import "./lib/trie/trie.aql"
 ```
 
 Imports resolve **relative to the working directory** (where you invoke `aql`),
 *not* the importing file — so run `aql` from the project root and write paths
 relative to it.
 
-**Registry.** If published: `aql install trie-<version>`, then `"trie" import
-end` loads the package `main` (`trie.aql` → `TrieMap`/`TrieSet`); import other
+**Registry.** If published: `aql install trie-<version>`, then `import "trie"`
+loads the package `main` (`trie.aql` → `TrieMap`/`TrieSet`); import other
 variants by their file.
 
 Each module is self-contained — vendor only the variant(s) you use.
@@ -33,10 +33,13 @@ Each module is self-contained — vendor only the variant(s) you use.
 
 ## Calling convention (read this first)
 
-- **Receiver first, then arguments:** `t key value TrieMap.set end`.
-- **Terminate every call** with `end` (or wrap it in parens). Without it, the
-  word swallows the next token. `(t "x" TrieSet.has)` and `t "x" TrieSet.has
-  end` are equivalent.
+- **Prefer forward arguments.** When a word takes its arguments directly after
+  it, write them that way and skip the terminator: `import "./trie.aql"`, not
+  `"./trie.aql" import end`.
+- **Receiver first for the trie words:** `t key value TrieMap.set end`. These
+  namespace calls look ahead for arguments, so **terminate them** with `end`
+  (or wrap in parens) — otherwise the word swallows the next token.
+  `(t "x" TrieSet.has)` and `t "x" TrieSet.has end` are equivalent.
 - **Tries are immutable.** `add` / `set` / `delete` return a *new* trie and
   leave the input unchanged — **always rebind the result**:
 
@@ -63,7 +66,7 @@ The variants are behaviourally identical (the property suite cross-checks them);
 ## Essential patterns (copy-paste, runnable)
 
 ```aql
-"./trie.aql" import end
+import "./trie.aql"
 
 # Build a set from a list of keys (fold; each add returns the next trie).
 # fold runs `init list [body] fold`; the body gets each key `w` and the
@@ -126,8 +129,10 @@ Exact call-forms, arg order, and return types: `api.json` (structured) and
 ## Rules the agent MUST follow
 
 1. **Rebind** the result of `add`/`set`/`delete` — tries never mutate in place.
-2. **Terminate** every call with `end` or parens.
-3. **Receiver-first** argument order: `t key value Map.set end`.
+2. **Receiver-first** argument order for the trie words: `t key value Map.set
+   end`, and **terminate** these calls with `end` or parens.
+3. **Prefer forward arguments** for words that take them directly — write
+   `import "./trie.aql"`, not `"./trie.aql" import end`.
 4. `keys`, `values`, `entries`, `with-prefix`, `keys-with-prefix` are **sorted**.
 5. `get` returns `none` and `has` returns `false` for an absent key — never an
    error. Use `has` to tell "absent" from "present with value `none`".

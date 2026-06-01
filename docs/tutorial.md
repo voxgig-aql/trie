@@ -17,7 +17,7 @@ We will start with the standard trie used as a **set** of words. Create a
 file `words.aql` next to `trie.aql`:
 
 ```aql
-"./trie.aql" import end
+import "./trie.aql"
 
 # AQL prints a program's first line last; one blank line up front keeps
 # the rest of the output in source order.
@@ -121,7 +121,7 @@ changes: use `TrieMap`, and `set` takes a value. Let us map each word to
 its length. Create `lengths.aql`:
 
 ```aql
-"./trie.aql" import end
+import "./trie.aql"
 "" print
 
 def m0 (TrieMap.make end)
@@ -155,7 +155,7 @@ the set script and swap the import and the namespace prefix for the radix
 tree:
 
 ```aql
-"./radix.aql" import end       # was ./trie.aql
+import "./radix.aql"       # was ./trie.aql
 "" print
 def t ((((( RadixSet.make end) "cat" RadixSet.add end) "car" RadixSet.add end) "card" RadixSet.add end) "dog" RadixSet.add end)
 `complete "ca": ${(t "ca" RadixSet.with-prefix end)}` print
