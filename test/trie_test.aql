@@ -1,0 +1,160 @@
+# Standard-trie tests using aql:test's imperative API.
+#
+# Run:
+#   aql test/trie_test.aql
+
+
+"aql:test"   import end
+"aql:report" import end
+"./trie.aql" import end
+
+
+# Build a small fixture map: cat=1 car=2 card=3 dog=4.
+def fixture fn [
+  [] [Map] [
+    ((((( TrieMap.make end)
+      "cat"  1 TrieMap.set end)
+      "car"  2 TrieMap.set end)
+      "card" 3 TrieMap.set end)
+      "dog"  4 TrieMap.set end)
+  ]
+]
+
+
+# --- TrieMap: empty trie ---------------------------------------------
+
+[
+  def t (TrieMap.make end)
+  0     (t TrieMap.size end)            assert.equal end
+  false (t "anything" TrieMap.has end)  assert.equal end
+  none  (t "anything" TrieMap.get end)  assert.equal end
+  []    (t TrieMap.keys end)            assert.equal end
+] "map-empty" test.test end
+
+
+# --- TrieMap: set then get/has --------------------------------------
+
+[
+  def t (fixture)
+  1     (t "cat"  TrieMap.get end) assert.equal end
+  2     (t "car"  TrieMap.get end) assert.equal end
+  3     (t "card" TrieMap.get end) assert.equal end
+  4     (t "dog"  TrieMap.get end) assert.equal end
+  true  (t "cat"  TrieMap.has end) assert.equal end
+  # a pure prefix is not itself a key
+  false (t "ca"   TrieMap.has end) assert.equal end
+  none  (t "ca"   TrieMap.get end) assert.equal end
+] "map-set-get" test.test end
+
+
+# --- TrieMap: set overwrites the value ------------------------------
+
+[
+  def t  (fixture)
+  def t2 (t "cat" 99 TrieMap.set end)
+  99 (t2 "cat" TrieMap.get end) assert.equal end
+  # other keys untouched
+  2  (t2 "car" TrieMap.get end) assert.equal end
+  # original is unchanged (persistence)
+  1  (t "cat"  TrieMap.get end) assert.equal end
+] "map-overwrite" test.test end
+
+
+# --- TrieMap: size, height, keys, values, entries -------------------
+
+[
+  def t (fixture)
+  4 (t TrieMap.size   end) assert.equal end
+  4 (t TrieMap.height end) assert.equal end
+  ["car" "card" "cat" "dog"] (t TrieMap.keys end) assert.equal end
+] "map-stats" test.test end
+
+
+# --- TrieMap: prefix queries ----------------------------------------
+
+[
+  def t (fixture)
+  ["car" "card" "cat"] (t "ca" TrieMap.keys-with-prefix end) assert.equal end
+  ["card"]             (t "card" TrieMap.keys-with-prefix end) assert.equal end
+  # a prefix that is present in no key yields nothing
+  []                   (t "z" TrieMap.keys-with-prefix end) assert.equal end
+  # whole-trie prefix
+  ["car" "card" "cat" "dog"] (t "" TrieMap.keys-with-prefix end) assert.equal end
+] "map-prefix" test.test end
+
+
+# --- TrieMap: longest-prefix ----------------------------------------
+
+[
+  def t (fixture)
+  "card" (t "cardiff"  TrieMap.longest-prefix end) assert.equal end
+  "car"  (t "carrot"   TrieMap.longest-prefix end) assert.equal end
+  "cat"  (t "cat"      TrieMap.longest-prefix end) assert.equal end
+  none   (t "zebra"    TrieMap.longest-prefix end) assert.equal end
+] "map-longest-prefix" test.test end
+
+
+# --- TrieMap: delete prunes only the target -------------------------
+
+[
+  def t  (fixture)
+  def t2 (t "car" TrieMap.delete end)
+  false (t2 "car"  TrieMap.has end) assert.equal end
+  # "card" sits below "car" and must survive
+  true  (t2 "card" TrieMap.has end) assert.equal end
+  true  (t2 "cat"  TrieMap.has end) assert.equal end
+  3     (t2 TrieMap.size end) assert.equal end
+  # deleting an absent key is a no-op
+  def t3 (t2 "nope" TrieMap.delete end)
+  3     (t3 TrieMap.size end) assert.equal end
+] "map-delete" test.test end
+
+
+# --- TrieSet: add / has / membership --------------------------------
+
+[
+  def s ((((TrieSet.make end)
+    "app"    TrieSet.add end)
+    "apple"  TrieSet.add end)
+    "banana" TrieSet.add end)
+  true  (s "app"    TrieSet.has end) assert.equal end
+  true  (s "apple"  TrieSet.has end) assert.equal end
+  false (s "appl"   TrieSet.has end) assert.equal end
+  false (s "orange" TrieSet.has end) assert.equal end
+  3     (s TrieSet.size end) assert.equal end
+  ["app" "apple" "banana"] (s TrieSet.keys end) assert.equal end
+] "set-add-has" test.test end
+
+
+# --- TrieSet: prefix + longest --------------------------------------
+
+[
+  def s (((TrieSet.make end)
+    "app"   TrieSet.add end)
+    "apple" TrieSet.add end)
+  ["app" "apple"] (s "app" TrieSet.with-prefix end) assert.equal end
+  "apple" (s "applesauce" TrieSet.longest-prefix end) assert.equal end
+  "app"   (s "appliance"  TrieSet.longest-prefix end) assert.equal end
+] "set-prefix" test.test end
+
+
+# --- TrieSet: delete -------------------------------------------------
+
+[
+  def s ((((TrieSet.make end)
+    "app"   TrieSet.add end)
+    "apple" TrieSet.add end)
+    "apply" TrieSet.add end)
+  def s2 (s "app" TrieSet.delete end)
+  false (s2 "app"   TrieSet.has end) assert.equal end
+  true  (s2 "apple" TrieSet.has end) assert.equal end
+  true  (s2 "apply" TrieSet.has end) assert.equal end
+] "set-delete" test.test end
+
+
+# --- summary -------------------------------------------------------
+
+"---" print
+"fail count: " print test.fail-count end print
+0 test.fail-count end assert.equal end
+"all green" print
