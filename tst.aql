@@ -1,0 +1,390 @@
+# tst: a ternary search tree over String keys, in AQL.
+#
+# This file exports TWO namespaces from one module:
+#
+#   TstMap — an associative map keyed by String, with prefix queries.
+#   TstSet — a set of Strings (membership), over the same engine.
+#
+# A ternary search tree (TST) is a hybrid of a binary search tree and a
+# trie. Each node holds a single character and three children:
+#
+#   lo  — subtree for characters that sort *before*  this node's character
+#   mid — subtree for the *next* character, taken when this one matches
+#   hi  — subtree for characters that sort *after*   this node's character
+#
+# Following `mid` advances through the key; `lo`/`hi` are an ordinary BST
+# over the alternatives at one position. This needs far fewer pointers per
+# node than a trie's full child map, handles large or sparse alphabets
+# gracefully, and yields keys in sorted order under an in-order walk — at
+# the cost of being a little deeper to descend.
+#
+# --- representation -------------------------------------------------
+#
+# A node is a Map { ch, end, val, lo, mid, hi }; an empty tree is `none`.
+# The middle child is named "mid" (not "eq") because `eq` is a builtin word
+# and would shadow the binding. Values are stored *boxed* (in a one-element
+# list) so the `do {…}` node constructor never evaluates a String value that
+# happens to name a word ("do", "if", …); `box`/`unbox` wrap and unwrap.
+#
+# TSTs here are PERSISTENT: every mutator returns a new tree, rebuilding the
+# nodes along the edited path. Paths are assembled with `concat`.
+#
+# Imported via `"./tst.aql" import end`.
+
+
+# --- boxing ---------------------------------------------------------
+
+def box fn [ [val:Any] [List] [ [] val push ] ]
+
+def unbox fn [ [b:Any] [Any] [ if ((b size) eq 0) [none] [b get 0] ] ]
+
+
+# --- node construction ----------------------------------------------
+
+# Build a node. `vbox` is an already-boxed value, `fin` the terminal flag
+# (named `fin`, not `end`, which is reserved). Call: `ch fin vbox lo mid hi mk-tnode`.
+def mk-tnode fn [
+  [hi:Any mid:Any lo:Any vbox:Any fin:Any ch:String] [Map] [
+    do {ch: [ch], end: [fin], val: [vbox], lo: [lo], mid: [mid], hi: [hi]}
+  ]
+]
+
+# Field-preserving rebuilds: each returns `node` with one field replaced.
+def with-lo  fn [ [lo:Any node:Map] [Map] [ (node "ch" get) (node "end" get) (node "val" get) lo (node "mid" get) (node "hi" get) mk-tnode ] ]
+def with-mid fn [ [mid:Any node:Map] [Map] [ (node "ch" get) (node "end" get) (node "val" get) (node "lo" get) mid (node "hi" get) mk-tnode ] ]
+def with-hi  fn [ [hi:Any node:Map] [Map] [ (node "ch" get) (node "end" get) (node "val" get) (node "lo" get) (node "mid" get) hi mk-tnode ] ]
+
+# Replace the terminal flag and (boxed) value. Call: `node vbox fin with-end-val`.
+def with-end-val fn [
+  [fin:Any vbox:Any node:Map] [Map] [
+    (node "ch" get) fin vbox (node "lo" get) (node "mid" get) (node "hi" get) mk-tnode
+  ]
+]
+
+
+# --- core: insert ---------------------------------------------------
+
+# Insert/replace `key` → `val` into `node` (an Any: a Map or `none`).
+# Call: `node key val tst-insert`.
+def tst-insert fn [
+  [val:Any key:String node:Any] [Any] [
+    def c (key slice 0 1)
+    def nd (if (node eq none) [ c false [] none none none mk-tnode ] [node])
+    def ndc (nd "ch" get)
+    if (c ndc lt) [
+      def lo2 ((nd "lo" get) key val tst-insert) (nd lo2 with-lo)
+    ] [
+      if (c ndc gt) [
+        def hi2 ((nd "hi" get) key val tst-insert) (nd hi2 with-hi)
+      ] [
+        def rest (key slice 1 (key size))
+        if ((rest size) eq 0) [ (nd (val box) true with-end-val) ] [
+          def mid2 ((nd "mid" get) rest val tst-insert) (nd mid2 with-mid)
+        ]
+      ]
+    ]
+  ]
+]
+
+
+# --- core: locate ---------------------------------------------------
+
+# The value bound to `key`, or `none`. Call: `node key tst-get`.
+def tst-get fn [
+  [key:String node:Any] [Any] [
+    if (node eq none) [none] [
+      def c (key slice 0 1)
+      def ndc (node "ch" get)
+      if (c ndc lt) [ (node "lo" get) key tst-get ] [
+        if (c ndc gt) [ (node "hi" get) key tst-get ] [
+          def rest (key slice 1 (key size))
+          if ((rest size) eq 0)
+            [ if (node "end" get) [(node "val" get) unbox] [none] ]
+            [ (node "mid" get) rest tst-get ]
+        ]
+      ]
+    ]
+  ]
+]
+
+# The node matching the last character of `key`, or `none`. Used to locate
+# the root of a prefix subtree. Call: `node key find-node`.
+def find-node fn [
+  [key:String node:Any] [Any] [
+    if (node eq none) [none] [
+      def c (key slice 0 1)
+      def ndc (node "ch" get)
+      if (c ndc lt) [ (node "lo" get) key find-node ] [
+        if (c ndc gt) [ (node "hi" get) key find-node ] [
+          def rest (key slice 1 (key size))
+          if ((rest size) eq 0) [node] [ (node "mid" get) rest find-node ]
+        ]
+      ]
+    ]
+  ]
+]
+
+
+# --- traversal (in-order ⇒ sorted) ----------------------------------
+
+# Append every terminating key at or below `node` (prefixed by `prefix`) to
+# `acc`. Call: `acc prefix node collect-t`.
+def collect-t fn [
+  [node:Any prefix:String acc:List] [List] [
+    if (node eq none) [acc] [
+      def a1 (acc prefix (node "lo" get) collect-t)
+      def pc ([prefix (node "ch" get)] concat)
+      def a2 (if (node "end" get) [a1 pc push] [a1])
+      def a3 (a2 pc (node "mid" get) collect-t)
+      a3 prefix (node "hi" get) collect-t
+    ]
+  ]
+]
+
+# Longest stored key that is a prefix of `key`. `consumed` is the path so
+# far; `best` the best terminating prefix seen. Call: `best consumed key node longest-t`.
+def longest-t fn [
+  [node:Any key:String consumed:String best:Any] [Any] [
+    if (node eq none) [best] [
+      def c (key slice 0 1)
+      def ndc (node "ch" get)
+      if (c ndc lt) [ best consumed key (node "lo" get) longest-t ] [
+        if (c ndc gt) [ best consumed key (node "hi" get) longest-t ] [
+          def pc ([consumed c] concat)
+          def best2 (if (node "end" get) [pc] [best])
+          def rest (key slice 1 (key size))
+          if ((rest size) eq 0) [best2] [ best2 pc rest (node "mid" get) longest-t ]
+        ]
+      ]
+    ]
+  ]
+]
+
+# Number of keys at or below `node`. Call: `node count-t`.
+def count-t fn [
+  [node:Any] [Integer] [
+    if (node eq none) [0] [
+      def here (if (node "end" get) [1] [0])
+      def l ((node "lo" get) count-t)
+      def m ((node "mid" get) count-t)
+      def h ((node "hi" get) count-t)
+      here l add m add h add
+    ]
+  ]
+]
+
+# Structural depth of the ternary tree (counting all of lo/mid/hi).
+# Call: `node tst-height`.
+def tst-height fn [
+  [node:Any] [Integer] [
+    if (node eq none) [0] [
+      def l ((node "lo" get) tst-height)
+      def m ((node "mid" get) tst-height)
+      def h ((node "hi" get) tst-height)
+      def mx1 (if (l gt m) [l] [m])
+      def mx  (if (mx1 gt h) [mx1] [h])
+      mx 1 add
+    ]
+  ]
+]
+
+
+# --- core: delete ---------------------------------------------------
+
+# Drop a node that has become completely empty (no key, no children).
+def tprune fn [
+  [node:Any] [Any] [
+    if (node eq none) [none] [
+      def empty (((node "end" get) not)
+        and (((node "lo" get) eq none)
+          and (((node "mid" get) eq none) and ((node "hi" get) eq none))))
+      if empty [none] [node]
+    ]
+  ]
+]
+
+# Remove `key` from `node`, pruning fully-empty nodes. Call: `node key tst-delete`.
+def tst-delete fn [
+  [key:String node:Any] [Any] [
+    if (node eq none) [none] [
+      def c (key slice 0 1)
+      def ndc (node "ch" get)
+      if (c ndc lt) [
+        def lo2 ((node "lo" get) key tst-delete) (node lo2 with-lo) tprune
+      ] [
+        if (c ndc gt) [
+          def hi2 ((node "hi" get) key tst-delete) (node hi2 with-hi) tprune
+        ] [
+          def rest (key slice 1 (key size))
+          if ((rest size) eq 0) [ (node [] false with-end-val) tprune ] [
+            def mid2 ((node "mid" get) rest tst-delete) (node mid2 with-mid) tprune
+          ]
+        ]
+      ]
+    ]
+  ]
+]
+
+
+# --- TstMap surface -------------------------------------------------
+#
+# The tree parameter is typed `Any` because an empty tree is `none`, not a
+# Map. Calls read receiver-first: `t key val TstMap.set end`.
+
+def map-make fn [ [] [Any] [none] ]
+
+def map-set fn [ [val:Any key:String t:Any] [Any] [ t key val tst-insert ] ]
+
+def map-get fn [ [key:String t:Any] [Any] [ t key tst-get ] ]
+
+def map-has fn [
+  [key:String t:Any] [Boolean] [
+    def n (t key find-node)
+    if (n eq none) [false] [n "end" get]
+  ]
+]
+
+def map-delete fn [ [key:String t:Any] [Any] [ t key tst-delete ] ]
+
+def map-keys fn [ [t:Any] [List] [ ([] "" t collect-t) sort ] ]
+
+def map-values fn [
+  [t:Any] [List] [
+    def ks (([] "" t collect-t) sort)
+    ks each [ var [[k] (t k tst-get) ] ]
+  ]
+]
+
+def map-entries fn [
+  [t:Any] [List] [
+    def ks (([] "" t collect-t) sort)
+    ks each [ var [[k] def v (t k tst-get) [] k push v push ] ]
+  ]
+]
+
+def map-size fn [ [t:Any] [Integer] [ t count-t ] ]
+
+def map-height fn [ [t:Any] [Integer] [ t tst-height ] ]
+
+def map-keys-with-prefix fn [
+  [prefix:String t:Any] [List] [
+    if ((prefix size) eq 0) [ ([] "" t collect-t) sort ] [
+      def pn (t prefix find-node)
+      if (pn eq none) [[]] [
+        def acc0 (if (pn "end" get) [[] prefix push] [[]])
+        (acc0 prefix (pn "mid" get) collect-t) sort
+      ]
+    ]
+  ]
+]
+
+def map-entries-with-prefix fn [
+  [prefix:String t:Any] [List] [
+    def ks (t prefix map-keys-with-prefix)
+    ks each [ var [[k] def v (t k tst-get) [] k push v push ] ]
+  ]
+]
+
+def map-longest-prefix fn [ [key:String t:Any] [Any] [ none "" key t longest-t ] ]
+
+# Rebuild a map from a list of [key, value] pairs (inverse of `entries`).
+def map-from-entries fn [
+  [entries:List] [Any] [
+    none entries [ var [[e acc] (acc (e get 0) (e get 1) tst-insert) ] ] fold
+  ]
+]
+
+def map-encode fn [
+  [t:Any] [String] [
+    def ks (([] "" t collect-t) sort)
+    def es (ks each [ var [[k] def v (t k tst-get) [] k push v push ] ])
+    def payload (do {kind: ["tstmap"], size: [t count-t], entries: [es]})
+    `${payload}`
+  ]
+]
+
+
+# --- TstSet surface -------------------------------------------------
+
+def set-make fn [ [] [Any] [none] ]
+
+def set-add fn [ [key:String t:Any] [Any] [ t key true tst-insert ] ]
+
+def set-has fn [
+  [key:String t:Any] [Boolean] [
+    def n (t key find-node)
+    if (n eq none) [false] [n "end" get]
+  ]
+]
+
+def set-delete fn [ [key:String t:Any] [Any] [ t key tst-delete ] ]
+
+def set-keys fn [ [t:Any] [List] [ ([] "" t collect-t) sort ] ]
+
+def set-size fn [ [t:Any] [Integer] [ t count-t ] ]
+
+def set-height fn [ [t:Any] [Integer] [ t tst-height ] ]
+
+def set-with-prefix fn [
+  [prefix:String t:Any] [List] [
+    if ((prefix size) eq 0) [ ([] "" t collect-t) sort ] [
+      def pn (t prefix find-node)
+      if (pn eq none) [[]] [
+        def acc0 (if (pn "end" get) [[] prefix push] [[]])
+        (acc0 prefix (pn "mid" get) collect-t) sort
+      ]
+    ]
+  ]
+]
+
+def set-longest-prefix fn [ [key:String t:Any] [Any] [ none "" key t longest-t ] ]
+
+# Rebuild a set from a list of keys (inverse of `keys`).
+def set-from-keys fn [
+  [keys:List] [Any] [
+    none keys [ var [[k acc] (acc k true tst-insert) ] ] fold
+  ]
+]
+
+def set-encode fn [
+  [t:Any] [String] [
+    def ks (([] "" t collect-t) sort)
+    def payload (do {kind: ["tstset"], size: [t count-t], keys: [ks]})
+    `${payload}`
+  ]
+]
+
+
+# --- namespaces -----------------------------------------------------
+
+export "TstMap" {
+  make:                map-make/r
+  set:                 map-set/r
+  get:                 map-get/r
+  has:                 map-has/r
+  delete:              map-delete/r
+  keys:                map-keys/r
+  values:              map-values/r
+  entries:             map-entries/r
+  size:                map-size/r
+  height:              map-height/r
+  keys-with-prefix:    map-keys-with-prefix/r
+  entries-with-prefix: map-entries-with-prefix/r
+  longest-prefix:      map-longest-prefix/r
+  from-entries:        map-from-entries/r
+  encode:              map-encode/r
+}
+
+export "TstSet" {
+  make:           set-make/r
+  add:            set-add/r
+  has:            set-has/r
+  delete:         set-delete/r
+  keys:           set-keys/r
+  size:           set-size/r
+  height:         set-height/r
+  with-prefix:    set-with-prefix/r
+  longest-prefix: set-longest-prefix/r
+  from-keys:      set-from-keys/r
+  encode:         set-encode/r
+}

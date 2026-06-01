@@ -1,0 +1,167 @@
+# Property-based tests for the standard trie — DIRECT-CODE FORM.
+#
+# This file exercises aql:test's imperative property surface: the
+# `test.check-prop` driver, called directly with explicit run / seed /
+# shrink counts —
+#
+#   test.check-prop NAME [GEN-BODY] [PROP-BODY] RUNS SEED MAX-SHRINKS
+#
+# The sibling file `test/trie_prop_spec.aql` covers the same ideas through
+# the declarative `PropertySpec` surface. Keeping both exercises both halves
+# of the framework; this form takes RUNS explicitly, so the heavier
+# whole-trie properties (keys round-trip, longest-prefix) run at a smaller
+# budget.
+#
+# Run:
+#   aql test/trie_pbt.aql
+
+
+"aql:test"   import end
+"aql:array"  import end
+"./trie.aql" import end
+
+
+def charset "abcdefghijklmnopqrstuvwxyz"
+
+
+# Build a TrieMap binding each generated key to itself.
+def map-of fn [
+  [keys:List] [Map] [
+    (TrieMap.make end) keys [
+      var [[k acc] acc k k TrieMap.set end ]
+    ] fold
+  ]
+]
+
+# Element-wise list equality (AQL's `eq` on lists is identity, not deep).
+# Call: `a b list-eq`.
+def list-eq fn [
+  [a:List b:List] [Boolean] [
+    if (((a size) (b size) eq) not) [false] [
+      true (iota (a size)) [
+        var [[i acc] acc ((a get (i)) (b get (i)) eq) and ]
+      ] fold
+    ]
+  ]
+]
+
+
+# --- P1. add then has -----------------------------------------------
+
+test.check-prop "no-false-negatives"
+  [r.string charset 8]
+  [
+    var [[s]
+      def t ((TrieSet.make end) s TrieSet.add end)
+      t s TrieSet.has end
+    ]
+  ]
+  20 1 0
+end
+
+
+# --- P2. set/get round-trips the value ------------------------------
+
+test.check-prop "set-get-roundtrip"
+  [r.string charset 8]
+  [
+    var [[s]
+      def t ((TrieMap.make end) s 42 TrieMap.set end)
+      (t s TrieMap.get end) 42 eq
+    ]
+  ]
+  20 1 0
+end
+
+
+# --- P3. keys() is sorted, distinct, and equals size ----------------
+
+test.check-prop "keys-sorted-and-counted"
+  [r.list-of [r.string charset 5] 12]
+  [
+    var [[keys]
+      def t (keys map-of)
+      def ks (t TrieMap.keys end)
+      def s1 ((ks sort) ks list-eq)
+      def s2 ((ks size) (t TrieMap.size end) eq)
+      def s3 ((ks array.unique size) (ks size) eq)
+      s1 s2 and s3 and
+    ]
+  ]
+  20 1 0
+end
+
+
+# --- P4. longest-prefix returns a stored key that prefixes the query -
+
+test.check-prop "longest-prefix-valid"
+  [r.string charset 10]
+  [
+    var [[s]
+      # store three nested prefixes of s
+      def k1 (s slice 0 2)
+      def k2 (s slice 0 5)
+      def t (((TrieSet.make end) k1 TrieSet.add end) k2 TrieSet.add end)
+      def lp (t s TrieSet.longest-prefix end)
+      # the longest stored prefix of a 10-char s is k2 (5 chars)
+      lp k2 eq
+    ]
+  ]
+  20 1 0
+end
+
+
+# --- P5. delete removes exactly the target --------------------------
+
+test.check-prop "delete-target-only"
+  [r.list-of [r.string charset 5] 10]
+  [
+    var [[keys]
+      def t (keys map-of)
+      def k (keys get 0)
+      def t2 (t k TrieMap.delete end)
+      def gone ((t2 k TrieMap.has end) not)
+      # any other distinct key is still present
+      def others (keys array.unique)
+      def survived (others each [
+        var [[o] if (o k eq) [true] [t2 o TrieMap.has end] ]
+      ])
+      def allsurv (survived all end)
+      gone allsurv and
+    ]
+  ]
+  20 1 0
+end
+
+
+# --- P6. encode mentions the key count ------------------------------
+
+test.check-prop "encode-has-size"
+  [r.list-of [r.string charset 5] 8]
+  [
+    var [[keys]
+      def t (keys map-of)
+      def enc (t TrieMap.encode end)
+      def n (t TrieMap.size end)
+      `size:${n}` enc indexof 0 gte
+    ]
+  ]
+  10 1 0
+end
+
+
+# --- summary -------------------------------------------------------
+
+"---" print
+"results:" print
+def all-results (test.results end)
+def _print-results (all-results each [
+  var [[r]
+    def nm (r "name" get)
+    def ok (r "ok" get)
+    if ok [ `  pass: ${nm}` print ] [ `  FAIL: ${nm}  failing-input=${r "failing-input" get}` print ]
+    0
+  ]
+])
+"fail count: " print (test.fail-count end) print
+0 (test.fail-count end) assert.equal end

@@ -1,11 +1,10 @@
 name: tests
 
-# The bloom-filter module is written in AQL, so CI has to build the
-# `aql` interpreter from source before it can run anything. The
-# language has no tagged release yet and has shipped breaking changes
-# between commits, so we pin AQL_REF to the exact commit this module is
-# verified against. Bump it (and re-run the suites locally) when
-# adopting a newer aql.
+# The trie utilities are written in AQL, so CI builds the `aql` interpreter
+# from source before running anything. AQL has no tagged release yet and has
+# shipped breaking changes between commits, so we pin AQL_REF to the exact
+# commit this library is verified against. Bump it (and re-run the suites
+# locally) when adopting a newer aql.
 on:
   push:
     branches: [main]
@@ -13,15 +12,14 @@ on:
   workflow_dispatch:
 
 env:
-  # aql-lang/aql @ main, 2026-05-31. See dx-report.md for the
-  # per-commit DX history this pin tracks.
-  AQL_REF: 5b983b6c0c9f59908ec6d53403c0880b241d64c6
+  # aql-lang/aql @ main, 2026-06-01.
+  AQL_REF: b6617dd2fbb60d06902778b0e2c06c4bfb0688a0
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out bloom-filter
+      - name: Check out trie
         uses: actions/checkout@v4
 
       - name: Set up Go
@@ -29,8 +27,8 @@ jobs:
         with:
           go-version: '1.24'
 
-      # The compiled binary only depends on AQL_REF (and the OS), so a
-      # hit here lets us skip the clone + build entirely.
+      # The compiled binary only depends on AQL_REF (and the OS), so a hit
+      # here lets us skip the clone + build entirely.
       - name: Cache aql binary
         id: cache-aql
         uses: actions/cache@v4
@@ -46,9 +44,9 @@ jobs:
           ref: ${{ env.AQL_REF }}
           path: aql-src
 
-      # The documented `go install …/cmd/go/aql@latest` cannot work
-      # while cmd/go/go.mod carries replace directives (dx-report
-      # §1.1), so we build from the clone with -mod=mod instead.
+      # The documented `go install …/cmd/go/aql@latest` cannot work while
+      # cmd/go/go.mod carries replace directives, so we build from the clone
+      # with -mod=mod instead.
       - name: Build aql
         if: steps.cache-aql.outputs.cache-hit != 'true'
         run: |
@@ -66,14 +64,25 @@ jobs:
 
       # Each suite ends with `0 test.fail-count end assert.equal`, so a
       # failure makes aql exit non-zero and fails the step.
-      - name: Unit tests
-        run: aql test/bloom_test.aql
+      - name: Unit tests — standard trie
+        run: aql test/trie_test.aql
+      - name: Unit tests — radix tree
+        run: aql test/radix_test.aql
+      - name: Unit tests — ternary search tree
+        run: aql test/tst_test.aql
+      - name: Unit tests — burst trie
+        run: aql test/burst_test.aql
 
-      - name: Property tests (spec format)
-        run: aql test/bloom_prop_spec.aql
-
-      - name: Property tests (PBT)
-        run: aql test/bloom_pbt.aql
+      - name: Property tests — standard trie (spec)
+        run: aql test/trie_prop_spec.aql
+      - name: Property tests — standard trie (pbt)
+        run: aql test/trie_pbt.aql
+      - name: Property tests — radix tree
+        run: aql test/radix_prop_spec.aql
+      - name: Property tests — ternary search tree
+        run: aql test/tst_prop_spec.aql
+      - name: Property tests — burst trie
+        run: aql test/burst_prop_spec.aql
 
       - name: Smoke demo
         run: aql index.aql

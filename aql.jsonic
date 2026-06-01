@@ -1,6 +1,6 @@
-name: bloom-filter
+name: trie
 major: 0
 minor: 1
 patch: 0
-main: bloom.aql
-files: [bloom.aql, index.aql]
+main: trie.aql
+files: [trie.aql, radix.aql, tst.aql, burst.aql, index.aql]

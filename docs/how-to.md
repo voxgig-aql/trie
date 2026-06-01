@@ -1,28 +1,29 @@
 # How-to guides
 
-Task-oriented recipes. Each one assumes you already know roughly what a
-bloom filter is; if not, start with the [Tutorial](tutorial.md). For the
-*why* behind any of these, follow the links into the
-[Explanation](explanation.md); for exact signatures, the
+Task-oriented recipes. Each assumes you know roughly what a trie is; if
+not, start with the [Tutorial](tutorial.md). For the *why*, follow the
+links into the [Explanation](explanation.md); for exact signatures, the
 [Reference](reference.md).
 
 - [Install and run aql](#install-and-run-aql)
-- [Size a filter for a target false-positive rate](#size-a-filter-for-a-target-false-positive-rate)
-- [Add and query items](#add-and-query-items)
-- [Estimate how many distinct items you've added](#estimate-how-many-distinct-items-youve-added)
-- [Merge two filters](#merge-two-filters)
-- [Handle an incompatible merge](#handle-an-incompatible-merge)
-- [Serialize a filter](#serialize-a-filter)
-- [Use the filter from your own script](#use-the-filter-from-your-own-script)
+- [Choose a variant](#choose-a-variant)
+- [Build a trie from a list of keys](#build-a-trie-from-a-list-of-keys)
+- [Autocomplete a prefix](#autocomplete-a-prefix)
+- [Do longest-prefix matching](#do-longest-prefix-matching)
+- [Use it as a map](#use-it-as-a-map)
+- [Delete keys](#delete-keys)
+- [Switch between variants](#switch-between-variants)
+- [Serialize a trie](#serialize-a-trie)
+- [Use a trie from your own script](#use-a-trie-from-your-own-script)
 - [Run the tests](#run-the-tests)
 
 ---
 
 ## Install and run aql
 
-The module is written in AQL, which has no tagged release yet, so build
-the interpreter from source (the documented `go install …/aql@latest`
-fails on the repo's replace directives — see `dx-report.md` §1.1):
+The library is written in AQL, which has no tagged release, so build the
+interpreter from source (the documented `go install …/aql@latest` fails on
+the repo's replace directives):
 
 ```bash
 git clone https://github.com/aql-lang/aql /tmp/aql-source
@@ -30,192 +31,222 @@ cd /tmp/aql-source/cmd/go
 GOFLAGS=-mod=mod go build -o "$HOME/.local/bin/aql" ./aql
 ```
 
-Make sure `$HOME/.local/bin` is on your `PATH`, then check it:
+Put `$HOME/.local/bin` on your `PATH`, then check and run:
 
 ```bash
 aql -version
-```
-
-Run any script in this repo by passing its path:
-
-```bash
 aql index.aql
 ```
 
-This module is verified against aql commit `5b983b6`; the CI workflow
+This library is verified against aql commit `b6617dd`; the CI workflow
 (`ci/test.yml`) pins the same commit.
 
 ---
 
-## Size a filter for a target false-positive rate
+## Choose a variant
 
-Pick `n` (how many distinct items you expect) and `p` (the
-false-positive rate you'll tolerate, in `(0, 0.5]`), and hand them to
-`Bloom.make`:
+All four behave identically through the API; pick by shape:
 
-```aql
-"./bloom.aql" import end
-def bf ({n: 100000, p: 0.001} Bloom.make end)
-(bf Bloom.params end) print
-# => {"k": 10, "m": 1437759, "n": 100000, "p": 0.001}
-```
+| Pick | When |
+|------|------|
+| **standard trie** (`trie.aql`)  | the default — simplest, predictable, one node per character |
+| **radix tree** (`radix.aql`)    | keys are long and don't share much — compression saves many nodes |
+| **ternary search tree** (`tst.aql`) | the alphabet is large/Unicode — three pointers per node beats a per-node child map |
+| **burst trie** (`burst.aql`)    | you want flat, cache-friendly buckets over a shallow trie spine |
 
-You do not choose the bit width or hash count — `m` and `k` are derived
-to meet your `p` at load `n`. Smaller `p` costs more bits. Inspect the
-result with `Bloom.params`. (How the numbers are derived:
-[Explanation → Sizing](explanation.md#sizing-the-filter).)
+When in doubt, start with the standard trie and switch later — it is a
+one-line change (see [Switch between variants](#switch-between-variants)).
+See [Explanation](explanation.md) for the trade-offs behind each.
 
 ---
 
-## Add and query items
+## Build a trie from a list of keys
 
-`Bloom.add` records an item (any value — it is stringified internally);
-`Bloom.contains` tests membership and returns a Boolean:
-
-```aql
-def _ (bf "user@example.com" Bloom.add end)
-
-(bf "user@example.com" Bloom.contains end) print   # => true
-(bf "nobody@example.com" Bloom.contains end) print # => false  (guaranteed correct)
-```
-
-A `false` is always correct. A `true` means "probably present" — verify
-against your real store if a false positive would be costly.
-
-To add many items, loop with `each` (push a sentinel `0` so the loop
-body yields a value):
+Fold the keys into a fresh trie. Each `add` returns the next trie, so the
+accumulator threads through:
 
 ```aql
-def _ (iota 1000 each [
-  var [[i] bf `key-${i}` Bloom.add end 0 ]
-])
+"./trie.aql" import end
+
+def words ["apple" "app" "apply" "banana"]
+def t ((TrieSet.make end) words [ var [[w acc] acc w TrieSet.add end ] ] fold)
 ```
+
+`fold` runs as `init list [body] fold` — here the empty trie is the
+initial accumulator and the body receives each key `w` and the
+accumulator `acc`, returning the next trie. For a map, carry a value too:
+`acc w v TrieMap.set end`.
 
 ---
 
-## Estimate how many distinct items you've added
+## Autocomplete a prefix
+
+`with-prefix` (set) / `keys-with-prefix` (map) returns every key beneath a
+prefix, sorted — exactly an autocomplete list:
 
 ```aql
-(bf Bloom.count end) print
+def t (((( TrieSet.make end) "app" TrieSet.add end) "apple" TrieSet.add end) "apply" TrieSet.add end)
+(t "app" TrieSet.with-prefix end) print     # => ["app", "apple", "apply"]
+(t "z"   TrieSet.with-prefix end) print     # => []
 ```
 
-`count` returns an **estimate** derived from the bit pattern, not a
-stored tally, so it drifts a little as the filter fills. If you need the
-*exact* number of `add` calls instead, read the `added` field — it is
-returned alongside the params by `Bloom.encode`, or accessible as
-`bf.added` inside a typed fn. (Background:
-[Explanation → Estimating cardinality](explanation.md#estimating-cardinality).)
+An empty prefix returns all keys. To autocomplete *and* show values, use
+`Map.entries-with-prefix`.
 
 ---
 
-## Merge two filters
+## Do longest-prefix matching
 
-Two filters built with the **same `(n, p)`** can be unioned. `merge`
-folds the second into the first and returns the first:
+Find the longest stored key that is a prefix of a query — e.g. dictionary
+tokenization or routing:
 
 ```aql
-def a ({n: 1000, p: 0.01} Bloom.make end)
-def b ({n: 1000, p: 0.01} Bloom.make end)
-def _a (a "from-a" Bloom.add end)
-def _b (b "from-b" Bloom.add end)
-
-def merged (a b Bloom.merge end)
-(merged "from-a" Bloom.contains end) print   # => true
-(merged "from-b" Bloom.contains end) print   # => true
+def t ((( TrieSet.make end) "car" TrieSet.add end) "card" TrieSet.add end)
+(t "cartoon" TrieSet.longest-prefix end) print   # => "car"
+(t "zebra"   TrieSet.longest-prefix end) print   # => None
 ```
 
-`merge` mutates the first filter (`a`) in place, so `a` and `merged` are
-the same object. `b` is left untouched. This is the basis for
-distributed counting — build filters independently, then union them.
+`none` means no stored key prefixes the query.
 
 ---
 
-## Handle an incompatible merge
+## Use it as a map
 
-`merge` requires both filters to share `m` and `k`; otherwise it raises.
-Wrap the call in `do … error …` to recover:
-
-```aql
-def a ({n: 1000, p: 0.01} Bloom.make end)
-def b ({n:  500, p: 0.01} Bloom.make end)   # different n → different m
-
-def result (do [a b Bloom.merge end] error [
-  var [[e] "filters are incompatible — rebuild b with a's (n, p)" ]
-])
-result print
-# => filters are incompatible — rebuild b with a's (n, p)
-```
-
-Inside the `error` handler the raised value is on the stack; here we
-`drop` it (via the `var` binding) and substitute a message. In a test,
-assert the failure instead:
+Swap `…Set` for `…Map`, and bind values with `set`:
 
 ```aql
-[a b Bloom.merge end] assert.throws end
+"./trie.aql" import end
+
+def m (((TrieMap.make end) "GET" 1 TrieMap.set end) "POST" 2 TrieMap.set end)
+
+(m "GET"    TrieMap.get end) print     # => 1
+(m "DELETE" TrieMap.get end) print     # => None  (absent)
+(m TrieMap.entries end)      print     # => [["GET" 1] ["POST" 2]]
 ```
 
-(Why the raised error reads `undefined_word`:
-[Explanation → Raising errors](explanation.md#raising-errors-in-aql-5b983b6).)
+Values may be any type, including Strings that happen to be AQL words
+(`"if"`, `"do"` …). Use `has` if you need to tell an absent key from a key
+whose stored value is `none`.
 
 ---
 
-## Serialize a filter
+## Delete keys
 
-`Bloom.encode` produces a jsonic-style string snapshot — parameters plus
-the set bit indices — suitable for logging or persistence:
+`delete` returns a new trie without the key, and preserves keys that sit
+below it:
 
 ```aql
-def snap ({n: 1000, p: 0.01} Bloom.make end)
-def _ (snap "x" Bloom.add end)
-(snap Bloom.encode end) print
-# => {added:1 k:7 m:9586 n:1000 p:0.01 set:[223 1110 2827 3714 4601 6318 7205]}
+def t ((( TrieSet.make end) "car" TrieSet.add end) "card" TrieSet.add end)
+def t2 (t "car" TrieSet.delete end)
+(t2 "car"  TrieSet.has end) print     # => false
+(t2 "card" TrieSet.has end) print     # => true   (survives)
+(t  "car"  TrieSet.has end) print     # => true   (original unchanged)
 ```
 
-There is no `decode` in the public API yet, so treat `encode` as a
-one-way snapshot. To "reload," rebuild a filter with the same `(n, p)`
-and re-add the items, or read the snapshot's fields yourself.
+Deleting an absent key is a no-op.
 
 ---
 
-## Use the filter from your own script
+## Switch between variants
 
-Import the library by relative path; you do **not** need to import
-`aql:math` or `aql:array` yourself — `bloom.aql` pulls in its own
-dependencies:
+The API is identical across variants, so switching is mechanical: change
+the import and the namespace prefix. From standard to ternary search tree:
 
-```aql
-"./bloom.aql" import end
-
-def bf ({n: 1000, p: 0.01} Bloom.make end)
-# … use the Bloom namespace …
+```diff
+- "./trie.aql" import end
+- def t ((TrieSet.make end) "cat" TrieSet.add end)
++ "./tst.aql" import end
++ def t ((TstSet.make end) "cat" TstSet.add end)
 ```
 
-Every `Bloom.*` call must end with `end` (or be wrapped in parens) so
-the word doesn't swallow the following token. `index.aql` is a complete
-worked example you can copy from.
+Every word (`add`, `has`, `with-prefix`, `longest-prefix`, `keys`, …)
+keeps its name and behaviour. The property suite cross-checks each variant
+against the standard trie, so the swap is safe.
+
+---
+
+## Serialize a trie
+
+`encode` produces a jsonic-style snapshot string — kind, size, and the
+sorted keys (sets) or entries (maps) — for logging or inspection:
+
+```aql
+def t (((TrieMap.make end) "a" 1 TrieMap.set end) "b" 2 TrieMap.set end)
+(t TrieMap.encode end) print
+# => {entries:[['a' 1] ['b' 2]] kind:'triemap' size:2}
+```
+
+There is no string `decode` (AQL exposes no jsonic-string parser). For a
+programmatic round-trip, extract the data and rebuild it:
+
+```aql
+def keys (t TrieSet.keys end)        # serialize these however you like
+def t2   (keys TrieSet.from-keys end)  # …and rebuild later
+```
+
+For a map use `entries` with `Map.from-entries`. `from-keys`/`from-entries`
+are available on every variant.
+
+## Fuzzy and wildcard search (standard trie)
+
+The standard trie adds two advanced queries. **Fuzzy** search returns every
+key within a Levenshtein edit distance:
+
+```aql
+def t (((TrieSet.make end) "cat" TrieSet.add end) "car" TrieSet.add end)
+(t "cat" 1 TrieSet.within end) print   # => ["car", "cat"]
+```
+
+**Wildcard** search matches a pattern where `?` is any single character and
+`*` is any run of characters:
+
+```aql
+(t "ca?" TrieSet.match end) print      # => ["car", "cat"]
+(t "*t"  TrieSet.match end) print       # => ["cat"]
+```
+
+Both work on `TrieMap` too (returning keys). To run them over data held in
+another variant, extract its `keys`/`entries` and rebuild a `TrieSet`
+/`TrieMap` with `from-keys`/`from-entries`.
+
+---
+
+## Use a trie from your own script
+
+Import the variant by relative path; you do **not** need to import
+anything else — each module pulls in its own dependencies:
+
+```aql
+"./radix.aql" import end
+def t (RadixSet.make end)
+# … use the RadixSet namespace …
+```
+
+Every call must end with `end` (or be wrapped in parens) so the word
+doesn't swallow the following token. `index.aql` is a complete worked
+example you can copy from.
 
 ---
 
 ## Run the tests
 
-Four suites ship with the module. Run them with `aql`:
+Each variant ships a unit suite and a property suite; the standard trie
+additionally has a second property suite exercising the imperative
+`test.check-prop` driver:
 
 ```bash
-aql test/bloom_test.aql        # example-based unit tests (aql:test)
-aql test/bloom_prop_spec.aql   # property tests — declarative spec format
-aql test/bloom_pbt.aql         # property tests — direct test.check-prop form
-aql index.aql                  # smoke demo / end-to-end walk-through
+aql test/trie_test.aql         # unit tests (standard trie)
+aql test/radix_test.aql        # unit tests (radix)
+aql test/tst_test.aql          # unit tests (ternary search tree)
+aql test/burst_test.aql        # unit tests (burst trie)
+
+aql test/trie_prop_spec.aql    # property tests — declarative spec form
+aql test/trie_pbt.aql          # property tests — direct test.check-prop form
+aql test/radix_prop_spec.aql   # property tests (radix, with trie cross-check)
+aql test/tst_prop_spec.aql     # property tests (tst,   with trie cross-check)
+aql test/burst_prop_spec.aql   # property tests (burst, with trie cross-check)
 ```
 
-The two property suites are intentionally separate: they exercise the
-two ways `aql:test` drives property checks. `bloom_prop_spec.aql` builds
-each property as a declarative `PropertySpec` (`test.prop`) and runs it
-with `test.run-property` at the default 100 iterations — clean, but the
-run count is fixed. `bloom_pbt.aql` calls the imperative
-`test.check-prop` driver directly, passing `runs`/`seed`/`max-shrinks`
-explicitly, which is why it carries the expensive O(m) properties
-(merge, encode) at a smaller run budget.
-
-Each test file ends by asserting `test.fail-count` is `0`, so a failure
-makes `aql` exit non-zero — which is exactly what the
-[CI workflow](../ci/test.yml) checks on every push and pull request.
+Each file ends by asserting `test.fail-count` is `0`, so a failure makes
+`aql` exit non-zero — which is what the [CI workflow](../ci/test.yml)
+checks on every push and pull request.

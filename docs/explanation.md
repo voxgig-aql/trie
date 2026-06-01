@@ -1,195 +1,162 @@
 # Explanation
 
-Understanding-oriented discussion of how this bloom filter works and
-why it is built the way it is. Read this when you want the *why*; for
-the *what*, see the [Reference](reference.md), and for *how to get a
-job done*, the [How-to guides](how-to.md).
+Understanding-oriented discussion of how these trie utilities work and why
+they are built this way. Read this for the *why*; for the *what*, see the
+[Reference](reference.md); for *how to get a job done*, the
+[How-to guides](how-to.md).
 
 ---
 
-## What a bloom filter is for
+## What a trie is for
 
-A bloom filter answers one question — *"have I seen this item?"* — using
-far less memory than storing the items themselves. It trades exactness
-for size: it will never miss an item it has seen (no false negatives),
-but it will occasionally claim to have seen an item it hasn't (a false
-positive). You choose the false-positive rate up front, and the filter
-sizes itself to meet it.
+A trie (prefix tree) stores a set of strings — or a map from strings to
+values — arranged so that keys sharing a prefix share a path through the
+structure. That single property makes a family of operations cheap and
+natural:
 
-This is the right tool when:
+- **membership** — exact, with no false positives or negatives;
+- **prefix enumeration** — "every key starting with `ca`", the engine
+  behind autocomplete;
+- **longest-prefix matching** — "the longest stored key that begins this
+  string", the engine behind routing tables and tokenizers;
+- **sorted iteration** — keys come out in order for free.
 
-- the set is large and you only need membership, not the items;
-- an occasional false positive is acceptable (you can re-check against
-  the real store on a hit);
-- you want cheap unions of independently-built sets (see
-  [Merging](#merging-filters)).
-
-It is the wrong tool when you need to enumerate members, delete them,
-or get an exact answer.
+A trie is the right tool when prefixes matter. When they don't — when you
+only need set membership and want to spend the least possible memory — a
+hash set or a [bloom filter](https://github.com/aql-lang) is a better fit.
 
 ---
 
-## How membership works
+## How membership and prefixes work
 
-The filter is a bit array of width `m`, all zero to start. Each item is
-run through `k` hash functions, each producing an index in `[0, m)`.
-`add` sets the bits at those `k` indices. `contains` checks whether
-*all* `k` bits for an item are set.
+Every variant walks the key one piece at a time from the root, following
+the edge labelled by the current piece. A node carries an `end` flag that
+marks whether a key terminates there:
 
 ```
-add "alice"      → bits {h1, h2, … hk} set to 1
-contains "alice" → are bits {h1, h2, … hk} all 1?  → yes
-contains "carol" → are bits {g1, g2, … gk} all 1?  → some 0 → no
+add "cat"          → path  c · a · t , mark end at the last node
+has "cat"          → walk  c · a · t , is end set?            → yes
+has "ca"           → walk  c · a     , is end set?            → no
+with-prefix "ca"   → walk  c · a     , collect all keys below → [car, card, cat]
 ```
 
-### Why there are no false negatives
+`with-prefix` is just "navigate to the prefix, then list everything
+beneath." `longest-prefix` is "walk the query, remembering the deepest
+node whose `end` is set." Because the walk visits children in sorted
+order, every list the library returns is sorted.
 
-`add` only ever turns bits *on*; nothing turns them off. So once an
-item's `k` bits are set, they stay set, and a later `contains` for that
-same item must find all of them set. A "definitely not present" answer
-(`false`) is therefore always trustworthy.
-
-### Why there are false positives
-
-Different items can hash to overlapping bits. If items you *did* add
-happen to collectively set all `k` bits that some *un-added* item maps
-to, `contains` returns `true` for that un-added item. The chance of this
-rises as the filter fills, which is exactly what the sizing math
-controls.
+There is no probabilistic element here: unlike a bloom filter, a trie
+stores the keys, so `has` is always exact.
 
 ---
 
-## Sizing the filter
+## The four variants
 
-`make` takes a target capacity `n` (how many distinct items you expect)
-and a target false-positive rate `p`, and derives the two structural
-parameters:
+All four answer the same questions identically — the property suite
+cross-checks each against the standard trie over random key sets. They
+differ only in how a node's children are arranged, which changes memory
+use and the shape (and depth) of the tree.
 
-- **`m`, the bit width** — `m = ceil( -n · ln(p) / (ln 2)² )`. Smaller
-  `p` or larger `n` means more bits.
-- **`k`, the hash count** — `k = round( (m / n) · ln 2 )`, the value
-  that minimises the false-positive rate for the chosen `m` and `n`.
+### Standard trie (`trie.aql`)
 
-For `{n: 1000, p: 0.01}` this yields `m = 9586`, `k = 7`. The
-[Reference](reference.md#bloommake) lists more worked values. Because
-`k = round(log₂(1/p))`, a `p` above `0.5` rounds `k` to `0` and is
-meaningless — keep `p` in `(0, 0.5]`, and in practice well below it.
+One node per character. A node's children are an association list of
+`[char, child]` pairs. Simple and predictable; the baseline. Its weakness
+is long, unshared keys: storing `"internationalization"` spends one node
+per letter even though none of those letters branch.
 
-The filter stores `n` and `p` alongside `m` and `k` so it can report
-its own configuration via `params` and so `merge` can check
-compatibility.
+### Radix / PATRICIA tree (`radix.aql`)
 
----
+Collapses every chain of single-child nodes into one edge carrying a
+multi-character *label*. `"romane"` and `"romanus"` share a single
+`"roman"` edge that then forks. Inserting a key that diverges inside a
+label **splits** the edge; deleting a key that leaves a node with one
+child **merges** them back. The payoff is far fewer nodes for sparse key
+sets; the cost is the split/merge bookkeeping.
 
-## Hashing: double hashing from two FNV variants
+### Ternary search tree (`tst.aql`)
 
-The module needs `k` independent-looking hash functions but computes
-only two real hashes. It derives index `i` as:
+Each node holds a single character and three children: `lo` and `hi` form
+an ordinary binary search tree over the *alternatives* at one position,
+and `mid` advances to the *next* character when this one matches. This
+needs only three pointers per node regardless of alphabet size, so it
+scales to large or Unicode alphabets where a per-node child map would be
+wasteful. An in-order walk (lo, then this character's subtree, then hi)
+yields sorted keys. The trade-off is a deeper descent — you may pass
+through several `lo`/`hi` nodes before advancing one character.
 
-```
-index_i = (h1 + i · h2) mod m        for i in 0 … k-1
-```
+### Burst trie (`burst.aql`)
 
-`h1` and `h2` are FNV-1a-style hashes of the stringified item, seeded
-differently; `h2` is forced odd (OR'd with 1) so the stride covers all
-residues mod `m`. This "double hashing" gives `k` well-spread indices at
-the cost of two hashes rather than `k`, a standard bloom-filter
-technique.
+Keeps keys in flat **buckets** (small association lists of suffix →
+value) until a bucket exceeds the burst limit, at which point it
+**bursts** into a trie node whose children are fresh sub-buckets keyed by
+the next character. The trie spine stays shallow while most keys live in
+buckets that are cheap to scan — the idea behind the cache-conscious
+HAT-trie. (A true bitmap/array-mapped trie wants fixed-width bit vectors,
+which AQL's data model does not offer; the burst trie is the member of
+that family that maps cleanly onto lists and maps.)
 
-Because AQL does not expose a character-to-code primitive, the module
-maps each character to a code via lookup in a fixed 95-character
-printable-ASCII alphabet (non-printable input collapses to space). This
-is a workaround, not a security-grade hash — the filter is for
-membership, not cryptography.
+### Picking one
 
----
-
-## Estimating cardinality
-
-`count` estimates how many distinct items were added, using the
-Swamidass–Baldi estimator:
-
-```
-n_est = -(m / k) · ln(1 - X/m)
-```
-
-where `X` is the number of set bits. The intuition: a fuller bit array
-implies more inserts, but with diminishing returns as collisions
-accumulate. The implementation guards the saturated case (`X = m`,
-where the logarithm would blow up) by returning the raw `added` counter
-instead.
-
-This is why `count` is an *estimate* and generally reads a little below
-the true insert count as the filter fills — 100 distinct inserts into a
-`{n:1000, p:0.01}` filter estimate around 90. If you need the exact
-number of `add` calls, read the `added` field via
-[`params`](reference.md#bloomparams)-adjacent access rather than
-`count`. An empty filter estimates exactly `0`.
+Start with the standard trie. Move to radix when keys are long and
+sparse, to a TST when the alphabet is large, to a burst trie when you want
+flat buckets over a shallow spine. Because the API is identical, the
+decision is reversible with a one-line change.
 
 ---
 
-## Merging filters
+## Design choices specific to this library
 
-Two filters built with the same `(n, p)` share the same `m` and `k`,
-which means their bit arrays are positionally comparable: bit `i` means
-the same thing in both. `merge` ORs the source's bits into the target,
-so the result contains every item either filter held. This is what
-makes bloom filters attractive for distributed counting — workers each
-build a filter, and a coordinator unions them with no re-hashing.
+### Persistence (immutability)
 
-`merge` insists on matching `m` and `k` because OR-ing arrays of
-different widths, or built with different hash counts, would be
-meaningless. The check is a guard against silently-wrong results.
+`add`, `set`, and `delete` return a *new* trie and never mutate the input.
+Each rebuilds only the nodes along the edited path; untouched subtrees are
+shared by reference. This makes tries safe to keep old versions of, pass
+around, and reason about, and it fits AQL's value-oriented data model —
+maps and lists behave as values, so "mutate in place" is not the natural
+idiom here.
 
----
+### Children as association lists
 
-## Design choices specific to this module
+A node's children are stored as a list of `[label, child]` pairs rather
+than as a map keyed by the character. This is deliberate: AQL maps cannot
+be constructed with computed keys, and `refine Object` instances cannot be
+enumerated, so neither can hold a dynamic, walkable set of children. A
+list of pairs is the one shape that is both rebuildable and iterable. The
+cost is that finding a child is a linear scan of the siblings — fine for a
+modest branching factor, and exactly what the ternary search tree
+optimizes away by ordering siblings into a BST.
 
-### Sparse bit storage
+### Boxed values
 
-Instead of a packed bit vector, bits live in a `Bits` Object keyed by
-stringified index (`"4601": 1`). This suits AQL's data model — there is
-no native fixed-width bit array — and keeps storage proportional to the
-number of *set* bits rather than `m`. The trade-off is that the `O(m)`
-operations (`count`, `merge`, `encode`) walk all `m` indices probing
-this map, which is the dominant cost in the
-[property tests](how-to.md#run-the-tests).
+Stored values are wrapped in a one-element list (a "box") inside each
+node. The node constructor builds its map with AQL's `do {…}` form, which
+*evaluates* the map's values — so a bare String value equal to a word name
+(`"if"`, `"do"`, `"get"`) would be dispatched as code instead of stored.
+Boxing keeps the value as inert list data; the library unboxes it on the
+way out. This is invisible to callers but is why a `…Map` can safely store
+*any* value.
 
-### Mutation in place
+### Why not `merge`
 
-`add` and `merge` mutate the filter Object in place (and also return
-it). This is deliberate: a filter is a large accumulator, and copying it
-on every insert would be wasteful. Callers that want an independent copy
-should build a fresh filter.
+Nodes are rebuilt with an explicit field-by-field constructor, never with
+AQL's `merge`. `merge` is a deep, index-wise merge: merging a replacement
+`kids` list into a node would fuse it element-by-element with the old
+list, silently entangling sibling subtrees. The explicit constructor
+replaces a field outright, which is what rebuilding a path requires.
 
-### Raising errors in aql 5b983b6
+### `height` is per-variant
 
-`merge`'s precondition check raises by dispatching an undefined,
-descriptively-named word (`bloom-merge-requires-equal-m`). That looks
-odd, and it is a workaround: aql 5b983b6 redefined `error` as an
-error-*handling* combinator (`do [risky] error [handler]`) and removed
-the older string-raising form, leaving no word to raise a custom
-message. Dispatching a word that isn't defined is the remaining way to
-produce a *catchable* failure whose text names the problem. The full
-story is in `dx-report.md` §9.10. If a future aql restores custom
-raising, this is the first thing to clean up.
-
-### `if` is always written all-forward
-
-Throughout `bloom.aql`, `if` is written `if cond [then] [else]` with
-every argument forward of the word. On aql 5b983b6 both the all-forward
-and the all-stack forms select the correct branch; only the *mixed*
-form, with `if` between the condition and its branches
-(`cond if […] […]`), silently takes the else branch. Keeping `if` and
-its operands on the same side sidesteps that trap. See `dx-report.md`
-§6.2. This is otherwise invisible to callers.
+`size` (the number of keys) is comparable across variants, but `height`
+reflects each structure's own shape — node-depth for the standard trie,
+fewer levels for a radix tree over the same keys, a deeper count for a
+ternary search tree, and bucket-vs-spine for a burst trie. Treat `height`
+as a window into the chosen structure, not a cross-variant metric.
 
 ---
 
 ## Further reading
 
-- [Tutorial](tutorial.md) — build your first filter step by step.
-- [How-to guides](how-to.md) — task-focused recipes.
+- [Tutorial](tutorial.md) — build your first trie step by step.
+- [How-to guides](how-to.md) — task-focused recipes, including choosing a
+  variant.
 - [Reference](reference.md) — the exact API.
-- `dx-report.md` — the developer-experience log behind these design
-  workarounds.

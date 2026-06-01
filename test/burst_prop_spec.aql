@@ -1,0 +1,143 @@
+# Property-based tests for the burst trie — DECLARATIVE SPEC FORMAT.
+#
+# Same invariants as the other variants, with longer key batches so buckets
+# actually burst, plus a cross-check against the standard trie.
+#
+# Run:
+#   aql test/burst_prop_spec.aql
+
+
+"aql:test"    import end
+"./burst.aql" import end
+"./trie.aql"  import end
+
+
+def charset "abcdefghijklmnopqrstuvwxyz"
+
+
+def starts-with fn [
+  [pfx:String s:String] [Boolean] [
+    def n (pfx size)
+    if ((s size) lt n) [false] [ (s slice 0 n) pfx eq ]
+  ]
+]
+
+def burst-of fn [
+  [keys:List] [Map] [
+    (BurstSet.make end) keys [ var [[k acc] acc k BurstSet.add end ] ] fold
+  ]
+]
+
+def trie-of fn [
+  [keys:List] [Map] [
+    (TrieSet.make end) keys [ var [[k acc] acc k TrieSet.add end ] ] fold
+  ]
+]
+
+def list-eq fn [
+  [a:List b:List] [Boolean] [
+    if (((a size) (b size) eq) not) [false] [
+      true (iota (a size)) [ var [[i acc] acc ((a get (i)) (b get (i)) eq) and ] ] fold
+    ]
+  ]
+]
+
+def all-have-prefix fn [
+  [p:String xs:List] [Boolean] [
+    (xs each [ var [[x] x p starts-with ] ]) all end
+  ]
+]
+
+def report fn [
+  [res:Map] [] [
+    def ok (res "ok" get)
+    def nm (res "name" get)
+    def msg (if ok
+      [`ok   ${nm} (${(res "runs" get)} runs)`]
+      [`FAIL ${nm}  failing-input: ${(res "failing-input" get)}`])
+    msg print
+  ]
+]
+
+
+def specs [
+
+  (test.prop "add-then-has"
+    [ r.string charset (r.int 1 12) ]
+    [ var [[key]
+        def s ((BurstSet.make end) key BurstSet.add end)
+        (s key BurstSet.has end)
+    ] ])
+
+  (test.prop "empty-has-nothing"
+    [ r.string charset (r.int 1 12) ]
+    [ var [[key] ((BurstSet.make end) key BurstSet.has end) not ] ])
+
+  (test.prop "set-then-get"
+    [ do { k: [r.string charset (r.int 1 12)], v: [r.int 0 1000] } ]
+    [ var [[in]
+        def k (in "k" get)
+        def v (in "v" get)
+        def t ((BurstMap.make end) k v BurstMap.set end)
+        (t k BurstMap.get end) v eq
+    ] ])
+
+  # Larger batches so buckets burst (burst-limit is 8).
+  (test.prop "bulk-all-present"
+    [ r.list-of [ r.string charset (r.int 1 6) ] (r.int 5 30) ]
+    [ var [[keys]
+        def s (keys burst-of)
+        (keys each [ var [[k] s k BurstSet.has end ] ]) all end
+    ] ])
+
+  (test.prop "prefix-sound"
+    [ r.list-of [ r.string charset (r.int 1 6) ] (r.int 5 30) ]
+    [ var [[keys]
+        def s (keys burst-of)
+        def p (keys get 0)
+        def hits (s p BurstSet.with-prefix end)
+        hits p all-have-prefix
+    ] ])
+
+  (test.prop "delete-removes-one"
+    [ r.list-of [ r.string charset (r.int 1 6) ] (r.int 5 30) ]
+    [ var [[keys]
+        def s (keys burst-of)
+        def k (keys get 0)
+        def before (s BurstSet.size end)
+        def s2 (s k BurstSet.delete end)
+        def gone ((s2 k BurstSet.has end) not)
+        def smaller ((s2 BurstSet.size end) (before 1 sub) eq)
+        gone smaller and
+    ] ])
+
+  # CROSS-CHECK against the standard trie over identical (bursting) batches.
+  (test.prop "burst-matches-trie"
+    [ r.list-of [ r.string charset (r.int 1 6) ] (r.int 5 40) ]
+    [ var [[keys]
+        def a (keys burst-of)
+        def b (keys trie-of)
+        (a BurstSet.keys end) (b TrieSet.keys end) list-eq
+    ] ])
+
+  (test.prop "longest-prefix-nested"
+    [ r.string charset 10 ]
+    [ var [[s]
+        def k1 (s slice 0 2)
+        def k2 (s slice 0 5)
+        def t (((BurstSet.make end) k1 BurstSet.add end) k2 BurstSet.add end)
+        (t s BurstSet.longest-prefix end) k2 eq
+    ] ])
+
+]
+
+
+def _ (specs each [ var [[s] (s test.run-property end) report 0 ] ])
+
+
+# --- summary -------------------------------------------------------
+
+"---" print
+"fail count: " print test.fail-count end print
+0 test.fail-count end assert.equal end
+"all green" print
