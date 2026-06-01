@@ -1,0 +1,146 @@
+# Ternary-search-tree tests using aql:test's imperative API.
+#
+# Run:
+#   aql test/tst_test.aql
+
+
+"aql:test"   import end
+"aql:report" import end
+"./tst.aql"  import end
+
+
+def fixture fn [
+  [] [Any] [
+    ((((( TstMap.make end)
+      "cat"  1 TstMap.set end)
+      "car"  2 TstMap.set end)
+      "card" 3 TstMap.set end)
+      "dog"  4 TstMap.set end)
+  ]
+]
+
+
+# --- empty (an empty TST is `none`) ---------------------------------
+
+[
+  def t (TstMap.make end)
+  none  t                               assert.equal end
+  0     (t TstMap.size end)             assert.equal end
+  false (t "anything" TstMap.has end)   assert.equal end
+  none  (t "anything" TstMap.get end)   assert.equal end
+  []    (t TstMap.keys end)             assert.equal end
+] "tst-empty" test.test end
+
+
+# --- set / get ------------------------------------------------------
+
+[
+  def t (fixture)
+  1 (t "cat"  TstMap.get end) assert.equal end
+  2 (t "car"  TstMap.get end) assert.equal end
+  3 (t "card" TstMap.get end) assert.equal end
+  4 (t "dog"  TstMap.get end) assert.equal end
+  false (t "ca" TstMap.has end) assert.equal end
+  none  (t "ca" TstMap.get end) assert.equal end
+] "tst-set-get" test.test end
+
+
+# --- overwrite + persistence ----------------------------------------
+
+[
+  def t  (fixture)
+  def t2 (t "cat" 99 TstMap.set end)
+  99 (t2 "cat" TstMap.get end) assert.equal end
+  1  (t  "cat" TstMap.get end) assert.equal end
+] "tst-overwrite" test.test end
+
+
+# --- sorted keys + size ---------------------------------------------
+
+[
+  def t (fixture)
+  4 (t TstMap.size end) assert.equal end
+  ["car" "card" "cat" "dog"] (t TstMap.keys end) assert.equal end
+] "tst-stats" test.test end
+
+
+# --- prefix queries -------------------------------------------------
+
+[
+  def t (fixture)
+  ["car" "card" "cat"] (t "ca" TstMap.keys-with-prefix end) assert.equal end
+  ["card"]             (t "card" TstMap.keys-with-prefix end) assert.equal end
+  []                   (t "z" TstMap.keys-with-prefix end) assert.equal end
+  ["car" "card" "cat" "dog"] (t "" TstMap.keys-with-prefix end) assert.equal end
+] "tst-prefix" test.test end
+
+
+# --- longest-prefix --------------------------------------------------
+
+[
+  def t (fixture)
+  "card" (t "cardiff" TstMap.longest-prefix end) assert.equal end
+  "car"  (t "carrot"  TstMap.longest-prefix end) assert.equal end
+  "cat"  (t "cat"     TstMap.longest-prefix end) assert.equal end
+  none   (t "zebra"   TstMap.longest-prefix end) assert.equal end
+] "tst-longest-prefix" test.test end
+
+
+# --- delete ----------------------------------------------------------
+
+[
+  def t  (fixture)
+  def t2 (t "car" TstMap.delete end)
+  false (t2 "car"  TstMap.has end) assert.equal end
+  true  (t2 "card" TstMap.has end) assert.equal end
+  true  (t2 "cat"  TstMap.has end) assert.equal end
+  3     (t2 TstMap.size end) assert.equal end
+  # deleting an absent key is a no-op
+  def t3 (t2 "nope" TstMap.delete end)
+  3     (t3 TstMap.size end) assert.equal end
+  # delete every key ends back at an empty tree
+  def e0 (fixture)
+  def e1 (e0 "cat"  TstMap.delete end)
+  def e2 (e1 "car"  TstMap.delete end)
+  def e3 (e2 "card" TstMap.delete end)
+  def e4 (e3 "dog"  TstMap.delete end)
+  0 (e4 TstMap.size end) assert.equal end
+] "tst-delete" test.test end
+
+
+# --- entries + values + reserved-word values ------------------------
+
+[
+  def t (((TstMap.make end) "a" 10 TstMap.set end) "ab" "do" TstMap.set end)
+  [["a" 10] ["ab" "do"]] (t TstMap.entries end) assert.equal end
+  [10 "do"]              (t TstMap.values  end) assert.equal end
+  "do" (t "ab" TstMap.get end) assert.equal end
+] "tst-entries" test.test end
+
+
+# --- TstSet ----------------------------------------------------------
+
+[
+  def s ((((TstSet.make end)
+    "in"   TstSet.add end)
+    "inn"  TstSet.add end)
+    "tin"  TstSet.add end)
+  true  (s "in"  TstSet.has end) assert.equal end
+  true  (s "inn" TstSet.has end) assert.equal end
+  false (s "i"   TstSet.has end) assert.equal end
+  3     (s TstSet.size end) assert.equal end
+  ["in" "inn" "tin"] (s TstSet.keys end) assert.equal end
+  ["in" "inn"] (s "in" TstSet.with-prefix end) assert.equal end
+  "inn" (s "innings" TstSet.longest-prefix end) assert.equal end
+  def s2 (s "in" TstSet.delete end)
+  false (s2 "in"  TstSet.has end) assert.equal end
+  true  (s2 "inn" TstSet.has end) assert.equal end
+] "tst-set" test.test end
+
+
+# --- summary -------------------------------------------------------
+
+"---" print
+"fail count: " print test.fail-count end print
+0 test.fail-count end assert.equal end
+"all green" print

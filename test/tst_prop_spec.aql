@@ -1,0 +1,143 @@
+# Property-based tests for the ternary search tree — DECLARATIVE SPEC FORMAT.
+#
+# Same invariants as the other variants, plus a cross-check that a TstSet
+# and a TrieSet built from identical keys agree exactly.
+#
+# Run:
+#   aql test/tst_prop_spec.aql
+
+
+"aql:test"   import end
+"./tst.aql"  import end
+"./trie.aql" import end
+
+
+def charset "abcdefghijklmnopqrstuvwxyz"
+
+
+def starts-with fn [
+  [pfx:String s:String] [Boolean] [
+    def n (pfx size)
+    if ((s size) lt n) [false] [ (s slice 0 n) pfx eq ]
+  ]
+]
+
+def tst-of fn [
+  [keys:List] [Any] [
+    (TstSet.make end) keys [ var [[k acc] acc k TstSet.add end ] ] fold
+  ]
+]
+
+def trie-of fn [
+  [keys:List] [Map] [
+    (TrieSet.make end) keys [ var [[k acc] acc k TrieSet.add end ] ] fold
+  ]
+]
+
+def list-eq fn [
+  [a:List b:List] [Boolean] [
+    if (((a size) (b size) eq) not) [false] [
+      true (iota (a size)) [ var [[i acc] acc ((a get i) (b get i) eq) and ] ] fold
+    ]
+  ]
+]
+
+def all-have-prefix fn [
+  [p:String xs:List] [Boolean] [
+    (xs each [ var [[x] x p starts-with ] ]) all end
+  ]
+]
+
+def report fn [
+  [res:Map] [] [
+    def ok (res "ok" get)
+    def nm (res "name" get)
+    def msg (if ok
+      [`ok   ${nm} (${(res "runs" get)} runs)`]
+      [`FAIL ${nm}  failing-input: ${(res "failing-input" get)}`])
+    msg print
+  ]
+]
+
+
+def specs [
+
+  (test.prop "add-then-has"
+    [ r.string charset (r.int 1 12) ]
+    [ var [[key]
+        def s ((TstSet.make end) key TstSet.add end)
+        (s key TstSet.has end)
+    ] ])
+
+  (test.prop "empty-has-nothing"
+    [ r.string charset (r.int 1 12) ]
+    [ var [[key] ((TstSet.make end) key TstSet.has end) not ] ])
+
+  (test.prop "set-then-get"
+    [ do { k: [r.string charset (r.int 1 12)], v: [r.int 0 1000] } ]
+    [ var [[in]
+        def k (in "k" get)
+        def v (in "v" get)
+        def t ((TstMap.make end) k v TstMap.set end)
+        (t k TstMap.get end) v eq
+    ] ])
+
+  (test.prop "bulk-all-present"
+    [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 1 15) ]
+    [ var [[keys]
+        def s (keys tst-of)
+        (keys each [ var [[k] s k TstSet.has end ] ]) all end
+    ] ])
+
+  (test.prop "prefix-sound"
+    [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 1 15) ]
+    [ var [[keys]
+        def s (keys tst-of)
+        def p (keys get 0)
+        def hits (s p TstSet.with-prefix end)
+        hits p all-have-prefix
+    ] ])
+
+  (test.prop "delete-removes-one"
+    [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 2 15) ]
+    [ var [[keys]
+        def s (keys tst-of)
+        def k (keys get 0)
+        def before (s TstSet.size end)
+        def s2 (s k TstSet.delete end)
+        def gone ((s2 k TstSet.has end) not)
+        def smaller ((s2 TstSet.size end) (before 1 sub) eq)
+        gone smaller and
+    ] ])
+
+  # CROSS-CHECK: a TstSet and a TrieSet over identical keys expose the same
+  # sorted key list. The TST's in-order walk must agree with the trie.
+  (test.prop "tst-matches-trie"
+    [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 1 20) ]
+    [ var [[keys]
+        def a (keys tst-of)
+        def b (keys trie-of)
+        (a TstSet.keys end) (b TrieSet.keys end) list-eq
+    ] ])
+
+  (test.prop "longest-prefix-nested"
+    [ r.string charset 10 ]
+    [ var [[s]
+        def k1 (s slice 0 2)
+        def k2 (s slice 0 5)
+        def t (((TstSet.make end) k1 TstSet.add end) k2 TstSet.add end)
+        (t s TstSet.longest-prefix end) k2 eq
+    ] ])
+
+]
+
+
+def _ (specs each [ var [[s] (s test.run-property end) report 0 ] ])
+
+
+# --- summary -------------------------------------------------------
+
+"---" print
+"fail count: " print test.fail-count end print
+0 test.fail-count end assert.equal end
+"all green" print
