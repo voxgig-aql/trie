@@ -39,7 +39,7 @@ def list-eq fn [
   [a:List b:List] [Boolean] [
     if (((a size) (b size) eq) not) [false] [
       true (iota (a size)) [
-        var [[i acc] acc ((a get i) (b get i) eq) and ]
+        var [[i acc] acc ((a get (i)) (b get (i)) eq) and ]
       ] fold
     ]
   ]
