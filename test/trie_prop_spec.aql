@@ -1,0 +1,142 @@
+# Property-based tests for the standard trie — DECLARATIVE SPEC FORMAT.
+#
+# This file exercises aql:test's declarative property surface: `test.prop`
+# builds a PropertySpec as data, and `test.run-property` runs it at the
+# default 100 iterations. The sibling file `test/trie_pbt.aql` covers the
+# same ideas through the imperative `test.check-prop` driver.
+#
+# GEN-BODY runs with `r` (a seeded aql:rand instance) in scope and must leave
+# exactly one value on the stack. PROPERTY-BODY takes that value and must
+# return a Boolean.
+#
+# Run:
+#   aql test/trie_prop_spec.aql
+
+
+"aql:test"   import end
+"./trie.aql" import end
+
+
+# Lowercase keys keep generated input readable; lengths stay short so the
+# trees built per iteration are cheap.
+def charset "abcdefghijklmnopqrstuvwxyz"
+
+
+# True when string `s` begins with `pfx` (AQL has no prefix word).
+# Call: `s pfx starts-with`.
+def starts-with fn [
+  [pfx:String s:String] [Boolean] [
+    def n (pfx size)
+    if ((s size) lt n) [false] [ (s slice 0 n) pfx eq ]
+  ]
+]
+
+# Build a TrieSet from a list of keys.
+def set-of fn [
+  [keys:List] [Map] [
+    (TrieSet.make end) keys [
+      var [[k acc] acc k TrieSet.add end ]
+    ] fold
+  ]
+]
+
+# Does every element of `xs` start with prefix `p`? Call: `xs p all-have-prefix`.
+def all-have-prefix fn [
+  [p:String xs:List] [Boolean] [
+    (xs each [ var [[x] x p starts-with ] ]) all end
+  ]
+]
+
+
+def report fn [
+  [res:Map] [] [
+    def ok (res "ok" get)
+    def nm (res "name" get)
+    def msg (if ok
+      [`ok   ${nm} (${(res "runs" get)} runs)`]
+      [`FAIL ${nm}  failing-input: ${(res "failing-input" get)}`])
+    msg print
+  ]
+]
+
+
+def specs [
+
+  # 1. add then has: a key just added is always a member.
+  (test.prop "add-then-has"
+    [ r.string charset (r.int 1 12) ]
+    [ var [[key]
+        def s ((TrieSet.make end) key TrieSet.add end)
+        (s key TrieSet.has end)
+    ] ])
+
+  # 2. empty set contains nothing.
+  (test.prop "empty-has-nothing"
+    [ r.string charset (r.int 1 12) ]
+    [ var [[key] ((TrieSet.make end) key TrieSet.has end) not ] ])
+
+  # 3. set then get returns exactly the value stored.
+  (test.prop "set-then-get"
+    [ do { k: [r.string charset (r.int 1 12)], v: [r.int 0 1000] } ]
+    [ var [[in]
+        def k (in "k" get)
+        def v (in "v" get)
+        def t ((TrieMap.make end) k v TrieMap.set end)
+        (t k TrieMap.get end) v eq
+    ] ])
+
+  # 4. every inserted key is present afterwards (bulk no-false-negatives).
+  (test.prop "bulk-all-present"
+    [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 1 15) ]
+    [ var [[keys]
+        def s (keys set-of)
+        (keys each [ var [[k] s k TrieSet.has end ] ]) all end
+    ] ])
+
+  # 5. size never exceeds the number of inserted keys (it equals the
+  #    distinct count; duplicates collapse).
+  (test.prop "size-bounded-by-inserts"
+    [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 1 15) ]
+    [ var [[keys]
+        def s (keys set-of)
+        (s TrieSet.size end) (keys size) lte
+    ] ])
+
+  # 6. prefix soundness: everything keys-with-prefix returns really does
+  #    start with that prefix.
+  (test.prop "prefix-sound"
+    [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 1 15) ]
+    [ var [[keys]
+        def s (keys set-of)
+        def p (keys get 0)
+        def hits (s p TrieSet.with-prefix end)
+        hits p all-have-prefix
+    ] ])
+
+  # 7. after deleting a key it is gone, and the set shrinks by exactly one.
+  (test.prop "delete-removes-one"
+    [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 2 15) ]
+    [ var [[keys]
+        def s (keys set-of)
+        def k (keys get 0)
+        def before (s TrieSet.size end)
+        def s2 (s k TrieSet.delete end)
+        def gone ((s2 k TrieSet.has end) not)
+        def smaller ((s2 TrieSet.size end) (before 1 sub) eq)
+        gone smaller and
+    ] ])
+
+]
+
+
+def _ (specs each [
+  var [[s] (s test.run-property end) report 0 ]
+])
+
+
+# --- summary -------------------------------------------------------
+
+"---" print
+"fail count: " print test.fail-count end print
+0 test.fail-count end assert.equal end
+"all green" print
