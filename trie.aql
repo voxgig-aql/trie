@@ -37,17 +37,29 @@
 
 # --- node construction ----------------------------------------------
 
-# A fresh, empty node: no key ends here, no value, no children.
-def empty-node fn [
-  [] [Map] [ {end: false, val: none, kids: []} ]
+# A value is stored *boxed* — wrapped in a one-element list — so that the
+# `do {…}` node constructor never sees a bare value. This matters because
+# `do` evaluates a map's values as code, so an unboxed String value equal to
+# a word name (e.g. "do", "if", "get") would be dispatched rather than
+# stored. `box` wraps; `unbox` unwraps, treating the empty box as `none`.
+def box fn [ [val:Any] [List] [ [] val push ] ]
+
+def unbox fn [
+  [b:Any] [Any] [ if ((b size) eq 0) [none] [b get 0] ]
 ]
 
-# Build a node from its three fields. The parameter is named `fin` (not
-# `end`) because `end` is the AQL call terminator and cannot be a binding
-# name; the stored *field* is still "end". Call: `kids val fin mk-node`.
+# A fresh, empty node: no key ends here, no value (empty box), no children.
+def empty-node fn [
+  [] [Map] [ {end: false, val: [], kids: []} ]
+]
+
+# Build a node from its three fields; `vbox` is an already-boxed value. The
+# flag parameter is named `fin` (not `end`) because `end` is the AQL call
+# terminator and cannot be a binding name; the stored *field* is still
+# "end". Call: `kids vbox fin mk-node`.
 def mk-node fn [
-  [fin:Any val:Any kids:Any] [Map] [
-    do {end: [fin], val: [val], kids: [kids]}
+  [fin:Any vbox:Any kids:Any] [Map] [
+    do {end: [fin], val: [vbox], kids: [kids]}
   ]
 ]
 
@@ -93,7 +105,7 @@ def drop-kid fn [
 def trie-insert fn [
   [val:Any key:String node:Map] [Map] [
     if ((key size) eq 0) [
-      (node "kids" get) val true mk-node
+      (node "kids" get) (val box) true mk-node
     ] [
       def ch (key slice 0 1)
       def rest (key slice 1 (key size))
@@ -134,7 +146,7 @@ def dead-node fn [
 def trie-delete fn [
   [key:String node:Map] [Map] [
     if ((key size) eq 0) [
-      (node "kids" get) none false mk-node
+      (node "kids" get) [] false mk-node
     ] [
       def ch (key slice 0 1)
       def rest (key slice 1 (key size))
@@ -167,7 +179,7 @@ def collect-keys fn [
 # As `collect-keys`, but appends [key, value] pairs. Call: `acc pfx node …`.
 def collect-entries fn [
   [node:Map pfx:String acc:List] [List] [
-    def acc2 (if (node "end" get) [acc [pfx (node "val" get)] push] [acc])
+    def acc2 (if (node "end" get) [acc [pfx ((node "val" get) unbox)] push] [acc])
     acc2 (node "kids" get) [
       var [[pair a]
         def newpfx `${pfx}${(pair get 0)}`
@@ -253,7 +265,7 @@ def map-set fn [
 def map-get fn [
   [key:String t:Map] [Any] [
     def n (t key node-at)
-    if (n eq none) [none] [ if (n "end" get) [n "val" get] [none] ]
+    if (n eq none) [none] [ if (n "end" get) [(n "val" get) unbox] [none] ]
   ]
 ]
 
