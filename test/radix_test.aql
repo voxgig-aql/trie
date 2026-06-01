@@ -1,0 +1,161 @@
+# Radix-tree tests using aql:test's imperative API.
+#
+# Run:
+#   aql test/radix_test.aql
+
+
+"aql:test"    import end
+"aql:report"  import end
+"./radix.aql" import end
+
+
+# Keys chosen to exercise edge splits and shared prefixes:
+#   test, team share "te"; slow/slower/slowest nest; toast shares only "t".
+def fixture fn [
+  [] [Map] [
+    (((((( RadixMap.make end)
+      "test"    1 RadixMap.set end)
+      "team"    2 RadixMap.set end)
+      "toast"   3 RadixMap.set end)
+      "slow"    4 RadixMap.set end)
+      "slower"  5 RadixMap.set end)
+  ]
+]
+
+
+# --- empty -----------------------------------------------------------
+
+[
+  def t (RadixMap.make end)
+  0     (t RadixMap.size end)           assert.equal end
+  false (t "x" RadixMap.has end)        assert.equal end
+  none  (t "x" RadixMap.get end)        assert.equal end
+  []    (t RadixMap.keys end)           assert.equal end
+] "radix-empty" test.test end
+
+
+# --- set / get, including a key that is a prefix of another ---------
+
+[
+  def t (fixture)
+  1 (t "test"   RadixMap.get end) assert.equal end
+  2 (t "team"   RadixMap.get end) assert.equal end
+  3 (t "toast"  RadixMap.get end) assert.equal end
+  4 (t "slow"   RadixMap.get end) assert.equal end
+  5 (t "slower" RadixMap.get end) assert.equal end
+  # "te" is an internal split point, not a stored key
+  false (t "te" RadixMap.has end) assert.equal end
+  none  (t "te" RadixMap.get end) assert.equal end
+  # "slow" is a real key AND a prefix of "slower"
+  true  (t "slow" RadixMap.has end) assert.equal end
+] "radix-set-get" test.test end
+
+
+# --- insert that forces an edge split keeps both keys ---------------
+
+[
+  def t0 ((RadixMap.make end) "test" 1 RadixMap.set end)
+  # at this point the root has a single edge labelled "test"
+  def t1 (t0 "team" 2 RadixMap.set end)   # must split "test" at "te"
+  1 (t1 "test" RadixMap.get end) assert.equal end
+  2 (t1 "team" RadixMap.get end) assert.equal end
+  ["team" "test"] (t1 RadixMap.keys end) assert.equal end
+] "radix-split" test.test end
+
+
+# --- overwrite + persistence ----------------------------------------
+
+[
+  def t  (fixture)
+  def t2 (t "team" 99 RadixMap.set end)
+  99 (t2 "team" RadixMap.get end) assert.equal end
+  2  (t  "team" RadixMap.get end) assert.equal end
+] "radix-overwrite" test.test end
+
+
+# --- stats + sorted keys --------------------------------------------
+
+[
+  def t (fixture)
+  5 (t RadixMap.size end) assert.equal end
+  ["slow" "slower" "team" "test" "toast"] (t RadixMap.keys end) assert.equal end
+] "radix-stats" test.test end
+
+
+# --- prefix queries, including a prefix ending mid-edge -------------
+
+[
+  def t (fixture)
+  ["team" "test"] (t "te" RadixMap.keys-with-prefix end) assert.equal end
+  ["slow" "slower"] (t "slo" RadixMap.keys-with-prefix end) assert.equal end
+  ["slow" "slower"] (t "slow" RadixMap.keys-with-prefix end) assert.equal end
+  ["slower"] (t "slowe" RadixMap.keys-with-prefix end) assert.equal end
+  [] (t "z" RadixMap.keys-with-prefix end) assert.equal end
+] "radix-prefix" test.test end
+
+
+# --- longest-prefix --------------------------------------------------
+
+[
+  def t (fixture)
+  "toast" (t "toaster" RadixMap.longest-prefix end) assert.equal end
+  "slow"  (t "slowing" RadixMap.longest-prefix end) assert.equal end
+  "slower"(t "slower"  RadixMap.longest-prefix end) assert.equal end
+  none    (t "zoo"     RadixMap.longest-prefix end) assert.equal end
+] "radix-longest-prefix" test.test end
+
+
+# --- delete with branch merge ---------------------------------------
+
+[
+  def t  (fixture)
+  # removing "slower" leaves "slow" the only key on that branch; the
+  # intermediate node must merge so "slow" and "slowest"-style siblings stay.
+  def t2 (t "slower" RadixMap.delete end)
+  false (t2 "slower" RadixMap.has end) assert.equal end
+  true  (t2 "slow"   RadixMap.has end) assert.equal end
+  4     (t2 RadixMap.size end) assert.equal end
+  # removing a non-leaf key ("slow") keeps its descendant ("slower")
+  def t3 (t "slow" RadixMap.delete end)
+  false (t3 "slow"   RadixMap.has end) assert.equal end
+  true  (t3 "slower" RadixMap.has end) assert.equal end
+  # deleting an absent key is a no-op
+  def t4 (t "nope" RadixMap.delete end)
+  5 (t4 RadixMap.size end) assert.equal end
+] "radix-delete" test.test end
+
+
+# --- entries + values ------------------------------------------------
+
+[
+  def t (((RadixMap.make end) "a" 10 RadixMap.set end) "ab" 20 RadixMap.set end)
+  [["a" 10] ["ab" 20]] (t RadixMap.entries end) assert.equal end
+  [10 20]              (t RadixMap.values  end) assert.equal end
+] "radix-entries" test.test end
+
+
+# --- RadixSet --------------------------------------------------------
+
+[
+  def s ((((RadixSet.make end)
+    "romane"  RadixSet.add end)
+    "romanus" RadixSet.add end)
+    "rubicon" RadixSet.add end)
+  true  (s "romane"  RadixSet.has end) assert.equal end
+  false (s "roman"   RadixSet.has end) assert.equal end
+  3     (s RadixSet.size end) assert.equal end
+  ["romane" "romanus" "rubicon"] (s RadixSet.keys end) assert.equal end
+  ["romane" "romanus"] (s "roman" RadixSet.with-prefix end) assert.equal end
+  "romanus" (s "romanusXY" RadixSet.longest-prefix end) assert.equal end
+  def s2 (s "romane" RadixSet.delete end)
+  false (s2 "romane"  RadixSet.has end) assert.equal end
+  true  (s2 "romanus" RadixSet.has end) assert.equal end
+] "radix-set" test.test end
+
+
+# --- summary -------------------------------------------------------
+
+"---" print
+"fail count: " print test.fail-count end print
+0 test.fail-count end assert.equal end
+"all green" print

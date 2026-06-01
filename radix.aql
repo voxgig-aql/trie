@@ -1,0 +1,440 @@
+# radix: a compressed prefix tree (radix / PATRICIA tree) over String keys.
+#
+# This file exports TWO namespaces from one module:
+#
+#   RadixMap — an associative map keyed by String, with prefix queries.
+#   RadixSet — a set of Strings (membership), over the same engine.
+#
+# A radix tree is a trie in which every chain of single-child nodes is
+# compressed into one edge carrying a multi-character *label*. Where a plain
+# trie spends one node per character, a radix tree spends one node per
+# branch point, so sparse key sets (long keys, little shared structure) use
+# far less memory. The cost is more intricate updates: inserting a key that
+# diverges in the middle of an edge must *split* that edge, and deleting a
+# key may *merge* a node back into its only remaining child.
+#
+# --- representation -------------------------------------------------
+#
+# A node is a plain Map with three fixed fields:
+#
+#   { end: Boolean,   # true if a key terminates here
+#     val: Any,       # the value bound to that key (RadixSet stores `true`)
+#     kids: List }    # edges, as an association list of [label, node]
+#
+# Edge labels are non-empty Strings. Invariant: the labels of a node's edges
+# all start with distinct characters, so a single first character selects at
+# most one edge. Paths are reassembled by concatenating labels.
+#
+# Like the standard trie, radix trees here are PERSISTENT: mutators return a
+# new tree and rebuild nodes along the edited path. We build paths with
+# `concat` rather than string interpolation, and rebuild nodes with an
+# explicit literal constructor — never `merge`, which deep-merges and would
+# fuse sibling edge lists.
+#
+# Imported via `"./radix.aql" import end`.
+
+
+# --- node construction ----------------------------------------------
+
+def empty-node fn [ [] [Map] [ {end: false, val: none, kids: []} ] ]
+
+# Build a node from its fields. `fin` (not `end`) because `end` is the AQL
+# call terminator and cannot be a binding name. Call: `kids val fin mk-node`.
+def mk-node fn [
+  [fin:Any val:Any kids:Any] [Map] [ do {end: [fin], val: [val], kids: [kids]} ]
+]
+
+# A node with no value and no edges is dead and gets pruned after a delete.
+def dead-node fn [
+  [node:Map] [Boolean] [
+    ((node "end" get) not) and (((node "kids" get) size) eq 0)
+  ]
+]
+
+
+# --- string + edge helpers ------------------------------------------
+
+# Length of the longest common prefix of `a` and `b` (symmetric, so call
+# order does not matter). Folds index-by-index, latching off at the first
+# mismatch.
+def common-len fn [
+  [a:String b:String] [Integer] [
+    def m (if ((a size) lt (b size)) [a size] [b size])
+    def res (do {n: [0], ok: [true]} (iota m) [
+      var [[i acc]
+        if (acc "ok" get) [
+          if ((a slice i (i 1 add)) (b slice i (i 1 add)) eq)
+            [ do {n: [(acc "n" get) 1 add], ok: [true]} ]
+            [ do {n: [acc "n" get], ok: [false]} ]
+        ] [acc]
+      ]
+    ] fold)
+    res "n" get
+  ]
+]
+
+# The edge pair [label, child] whose label shares `key`'s first character,
+# or `none`. Call: `node key find-edge`.
+def find-edge fn [
+  [key:String node:Map] [Any] [
+    def fc (key slice 0 1)
+    none (node "kids" get) [
+      var [[pair acc] if (((pair get 0) slice 0 1) fc eq) [pair] [acc] ]
+    ] fold
+  ]
+]
+
+# `node` with the edge `oldlabel` replaced by edge `newlabel` → `child`.
+# Call: `node oldlabel newlabel child set-edge`.
+def set-edge fn [
+  [child:Map newlabel:String oldlabel:String node:Map] [Map] [
+    def kept ([] (node "kids" get) [
+      var [[pair acc] if ((pair get 0) oldlabel eq) [acc] [acc pair push] ]
+    ] fold)
+    def kids2 (kept [newlabel child] push)
+    kids2 (node "val" get) (node "end" get) mk-node
+  ]
+]
+
+# `node` with a new edge `label` → `child` appended. Call: `node label child add-edge`.
+def add-edge fn [
+  [child:Map label:String node:Map] [Map] [
+    def kids2 ((node "kids" get) [label child] push)
+    kids2 (node "val" get) (node "end" get) mk-node
+  ]
+]
+
+# `node` with the edge `label` removed. Call: `node label drop-edge`.
+def drop-edge fn [
+  [label:String node:Map] [Map] [
+    def kept ([] (node "kids" get) [
+      var [[pair acc] if ((pair get 0) label eq) [acc] [acc pair push] ]
+    ] fold)
+    kept (node "val" get) (node "end" get) mk-node
+  ]
+]
+
+
+# --- core: insert ---------------------------------------------------
+
+# Insert/replace `key` → `val` beneath `node`. Call: `node key val radix-insert`.
+def radix-insert fn [
+  [val:Any key:String node:Map] [Map] [
+    if ((key size) eq 0) [ (node "kids" get) val true mk-node ] [
+      def edge (node key find-edge)
+      if (edge eq none) [
+        # nothing shares a first character: add the whole key as one edge
+        def term ([] val true mk-node)
+        node key term add-edge
+      ] [
+        def lab (edge get 0)
+        def c (edge get 1)
+        def p (lab key common-len)
+        if (p (lab size) eq) [
+          # the whole label matches a prefix of key: descend with the rest
+          def rest (key slice p (key size))
+          def newc (c rest val radix-insert)
+          node lab lab newc set-edge
+        ] [
+          # key diverges inside the label: split the edge at p
+          def pre   (key slice 0 p)
+          def lrest (lab slice p (lab size))
+          def krest (key slice p (key size))
+          def mid0  ([[lrest c]] none false mk-node)
+          def mid (if ((krest size) eq 0)
+            [ (mid0 "kids" get) val true mk-node ]
+            [ def kterm ([] val true mk-node) mid0 krest kterm add-edge ])
+          node lab pre mid set-edge
+        ]
+      ]
+    ]
+  ]
+]
+
+
+# --- core: locate ---------------------------------------------------
+
+# The node exactly at `key`, or `none` (key must consume whole labels).
+# Call: `node key radix-at`.
+def radix-at fn [
+  [key:String node:Map] [Any] [
+    if ((key size) eq 0) [node] [
+      def edge (node key find-edge)
+      if (edge eq none) [none] [
+        def lab (edge get 0)
+        def c (edge get 1)
+        def p (lab key common-len)
+        if (p (lab size) eq) [ c (key slice p (key size)) radix-at ] [none]
+      ]
+    ]
+  ]
+]
+
+# The value bound to `key`, or `none` if absent. Call: `node key radix-get`.
+def radix-get fn [
+  [key:String node:Map] [Any] [
+    def n (node key radix-at)
+    if (n eq none) [none] [ if (n "end" get) [n "val" get] [none] ]
+  ]
+]
+
+
+# --- traversal ------------------------------------------------------
+
+# Append every terminating key at or below `node` (prefixed by `pfx`) to
+# `acc`. Call: `acc pfx node collect-r`.
+def collect-r fn [
+  [node:Map pfx:String acc:List] [List] [
+    def acc2 (if (node "end" get) [acc pfx push] [acc])
+    acc2 (node "kids" get) [
+      var [[pair a]
+        def np ([pfx (pair get 0)] concat)
+        (a np (pair get 1) collect-r)
+      ]
+    ] fold
+  ]
+]
+
+# Keys at or below `prefix`, with `apath` the path already consumed.
+# Call: `acc apath prefix node collect-prefix`.
+def collect-prefix fn [
+  [node:Any prefix:String apath:String acc:List] [List] [
+    if ((prefix size) eq 0) [ acc apath node collect-r ] [
+      def edge (node prefix find-edge)
+      if (edge eq none) [acc] [
+        def lab (edge get 0)
+        def c (edge get 1)
+        def p (lab prefix common-len)
+        if (p (prefix size) eq) [
+          # prefix runs out within this edge: everything under it qualifies
+          def np ([apath lab] concat)
+          (acc np c collect-r)
+        ] [
+          if (p (lab size) eq) [
+            # whole label consumed: continue with the remaining prefix
+            def np ([apath lab] concat)
+            def rp (prefix slice p (prefix size))
+            (acc np rp c collect-prefix)
+          ] [acc]
+        ]
+      ]
+    ]
+  ]
+]
+
+# Longest stored key that is a prefix of `key`. `apath` is the path consumed
+# so far; `best` is the best terminating prefix seen.
+# Call: `best apath key node longest-r`.
+def longest-r fn [
+  [node:Map key:String apath:String best:Any] [Any] [
+    def best2 (if (node "end" get) [apath] [best])
+    if ((key size) eq 0) [best2] [
+      def edge (node key find-edge)
+      if (edge eq none) [best2] [
+        def lab (edge get 0)
+        def c (edge get 1)
+        def p (lab key common-len)
+        if (p (lab size) eq) [
+          def np ([apath lab] concat)
+          def rk (key slice p (key size))
+          (best2 np rk c longest-r)
+        ] [best2]
+      ]
+    ]
+  ]
+]
+
+# Number of keys at or below `node`. Call: `node count-keys`.
+def count-keys fn [
+  [node:Map] [Integer] [
+    def here (if (node "end" get) [1] [0])
+    here (node "kids" get) [
+      var [[pair acc] acc ((pair get 1) count-keys) add ]
+    ] fold
+  ]
+]
+
+# Longest root-to-leaf path measured in *nodes* (0 for an empty tree).
+# Call: `node node-height`.
+def node-height fn [
+  [node:Map] [Integer] [
+    0 (node "kids" get) [
+      var [[pair acc]
+        def h ((pair get 1) node-height 1 add)
+        if (h gt acc) [h] [acc]
+      ]
+    ] fold
+  ]
+]
+
+
+# --- core: delete ---------------------------------------------------
+
+# Remove `key` beneath `node`, pruning dead branches and merging a node that
+# is left non-terminal with a single child. Call: `node key radix-delete`.
+def radix-delete fn [
+  [key:String node:Map] [Map] [
+    if ((key size) eq 0) [ (node "kids" get) none false mk-node ] [
+      def edge (node key find-edge)
+      if (edge eq none) [node] [
+        def lab (edge get 0)
+        def c (edge get 1)
+        def p (lab key common-len)
+        if (p (lab size) eq) [
+          def newc (c (key slice p (key size)) radix-delete)
+          if (newc dead-node) [ node lab drop-edge ] [
+            def gk (newc "kids" get)
+            if (((newc "end" get) not) and ((gk size) eq 1)) [
+              def gpair  (gk get 0)
+              def mlabel ([lab (gpair get 0)] concat)
+              def gchild (gpair get 1)
+              (node lab mlabel gchild set-edge)
+            ] [ node lab lab newc set-edge ]
+          ]
+        ] [node]
+      ]
+    ]
+  ]
+]
+
+
+# --- RadixMap surface -----------------------------------------------
+#
+# Signatures are the reverse of the call order, so calls read receiver-first:
+# `t key val RadixMap.set end`.
+
+# A [key, value] pair for `key` in `t`. Built with `push` because a
+# var-bound name does not resolve inside a nested list literal.
+# Call: `t key kv-pair`.
+def kv-pair fn [
+  [key:String t:Map] [List] [
+    def v (t key radix-get)
+    [] key push v push
+  ]
+]
+
+def map-make fn [ [] [Map] [empty-node] ]
+
+def map-set fn [ [val:Any key:String t:Map] [Map] [ t key val radix-insert ] ]
+
+def map-get fn [ [key:String t:Map] [Any] [ t key radix-get ] ]
+
+def map-has fn [
+  [key:String t:Map] [Boolean] [
+    def n (t key radix-at)
+    if (n eq none) [false] [n "end" get]
+  ]
+]
+
+def map-delete fn [ [key:String t:Map] [Map] [ t key radix-delete ] ]
+
+def map-keys fn [ [t:Map] [List] [ ([] "" t collect-r) sort ] ]
+
+def map-values fn [
+  [t:Map] [List] [
+    def ks (([] "" t collect-r) sort)
+    ks each [ var [[k] (t k radix-get) ] ]
+  ]
+]
+
+def map-entries fn [
+  [t:Map] [List] [
+    def ks (([] "" t collect-r) sort)
+    ks each [ var [[k] (t k kv-pair) ] ]
+  ]
+]
+
+def map-size fn [ [t:Map] [Integer] [ t count-keys ] ]
+
+def map-height fn [ [t:Map] [Integer] [ t node-height ] ]
+
+def map-keys-with-prefix fn [
+  [prefix:String t:Map] [List] [ ([] "" prefix t collect-prefix) sort ]
+]
+
+def map-entries-with-prefix fn [
+  [prefix:String t:Map] [List] [
+    def ks (([] "" prefix t collect-prefix) sort)
+    ks each [ var [[k] (t k kv-pair) ] ]
+  ]
+]
+
+def map-longest-prefix fn [ [key:String t:Map] [Any] [ none "" key t longest-r ] ]
+
+def map-encode fn [
+  [t:Map] [String] [
+    def ks (([] "" t collect-r) sort)
+    def es (ks each [ var [[k] (t k kv-pair) ] ])
+    def payload (do {kind: ["radixmap"], size: [t count-keys], entries: [es]})
+    `${payload}`
+  ]
+]
+
+
+# --- RadixSet surface -----------------------------------------------
+
+def set-make fn [ [] [Map] [empty-node] ]
+
+def set-add fn [ [key:String t:Map] [Map] [ t key true radix-insert ] ]
+
+def set-has fn [
+  [key:String t:Map] [Boolean] [
+    def n (t key radix-at)
+    if (n eq none) [false] [n "end" get]
+  ]
+]
+
+def set-delete fn [ [key:String t:Map] [Map] [ t key radix-delete ] ]
+
+def set-keys fn [ [t:Map] [List] [ ([] "" t collect-r) sort ] ]
+
+def set-size fn [ [t:Map] [Integer] [ t count-keys ] ]
+
+def set-height fn [ [t:Map] [Integer] [ t node-height ] ]
+
+def set-with-prefix fn [
+  [prefix:String t:Map] [List] [ ([] "" prefix t collect-prefix) sort ]
+]
+
+def set-longest-prefix fn [ [key:String t:Map] [Any] [ none "" key t longest-r ] ]
+
+def set-encode fn [
+  [t:Map] [String] [
+    def ks (([] "" t collect-r) sort)
+    def payload (do {kind: ["radixset"], size: [t count-keys], keys: [ks]})
+    `${payload}`
+  ]
+]
+
+
+# --- namespaces -----------------------------------------------------
+
+export "RadixMap" {
+  make:                map-make/r
+  set:                 map-set/r
+  get:                 map-get/r
+  has:                 map-has/r
+  delete:              map-delete/r
+  keys:                map-keys/r
+  values:              map-values/r
+  entries:             map-entries/r
+  size:                map-size/r
+  height:              map-height/r
+  keys-with-prefix:    map-keys-with-prefix/r
+  entries-with-prefix: map-entries-with-prefix/r
+  longest-prefix:      map-longest-prefix/r
+  encode:              map-encode/r
+}
+
+export "RadixSet" {
+  make:           set-make/r
+  add:            set-add/r
+  has:            set-has/r
+  delete:         set-delete/r
+  keys:           set-keys/r
+  size:           set-size/r
+  height:         set-height/r
+  with-prefix:    set-with-prefix/r
+  longest-prefix: set-longest-prefix/r
+  encode:         set-encode/r
+}
