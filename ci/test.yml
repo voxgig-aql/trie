@@ -85,4 +85,4 @@ jobs:
         run: aql test/burst_prop_spec.aql
 
       - name: Smoke demo
-        run: aql index.aql
+        run: aql test/smoke.aql
