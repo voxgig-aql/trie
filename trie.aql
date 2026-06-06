@@ -406,18 +406,18 @@ def map-delete fn [
 
 def map-keys fn [ [t:Map] [List] [ [] "" t collect-keys sort ] ]
 
-def map-values fn [
-  [t:Map] [List] [
-    def ks (([] "" t collect-keys) sort)
-    ks each [ var [[k] (t k map-get) ] ]
-  ]
-]
-
 def map-entries fn [
   [t:Map] [List] [
     def ks (([] "" t collect-keys) sort)
     ks each [ var [[k] def v (t k map-get) [] k push v push ] ]
   ]
+]
+
+# Values in key order. `entries` is already sorted [key, value] pairs, so we
+# pluck the value column with the receiverless lens `$.1` (a Reach value that
+# `each` applies to every element) — no second walk, no per-key lookup.
+def map-values fn [
+  [t:Map] [List] [ (t map-entries) each $.1 ]
 ]
 
 def map-size fn [ [t:Map] [Integer] [ t count-keys ] ]

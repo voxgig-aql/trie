@@ -189,6 +189,12 @@ Read `DX-REPORT.md` for the full account; the load-bearing AQL traps are:
 - **Build path strings with core `add`** (`pfx ch add`); `concat`/`indexof`/
   `contains` now live in `aql:string-util` (`StringUtil.*`).
 - **`fold` binds `[element accumulator]`** (element first, accumulator on top).
+- **Receiverless Reach lenses** (`$.field`, `$.0`) are inert `Reach` values that
+  `each`/`filter`/`sortby` apply per element — `(t map-entries) each $.1` plucks
+  the value column. They only express a *plain* field/index read, so they can't
+  replace the child-list folds, which couple a key-equality test against a
+  runtime char with a recursive descent. `filter` also needs a real `Function`
+  or `Reach`, not a `[ var [...] ]` block, so the keep-folds stay as folds.
 - Values can be stored **directly** in a `do {…}` node — earlier aql evaluated
   map values as code (so a String naming a word was dispatched, which forced a
   "boxing" workaround), but `db828ec` fixed it.

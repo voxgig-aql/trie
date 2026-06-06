@@ -86,3 +86,17 @@ jobs:
 
       - name: Smoke demo
         run: aql test/smoke.aql
+
+      # Advisory static check — NOT a gate. `aql check` is a structural type
+      # checker, but this library is deliberately generic: every node is a plain
+      # Map walked by stack-dispatched words, and the namespace surface is
+      # exported by reference (`map-add/r`, …). The checker can't trace those
+      # reference exports or the dynamic dispatch, so it reports false
+      # `unused_def` and `no_signature` diagnostics on code the suites prove
+      # correct. We run it with `--soft` (always exits 0) and
+      # `continue-on-error` so the diagnostics surface in the log for a human to
+      # skim, without ever failing the build. The runnable test suites above are
+      # the real gate.
+      - name: Static check (advisory, non-gating)
+        continue-on-error: true
+        run: aql check --soft trie.aql radix.aql tst.aql burst.aql
