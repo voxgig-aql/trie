@@ -54,7 +54,7 @@ def ts ((((TstSet.make)
 
 def bm ((BurstMap.make) (iota 20) [
   var [[i acc]
-    def k ([ "item-" (convert String i) ] concat)
+    def k ( "item-" (convert String i)  add)
     acc k i BurstMap.set end
   ]
 ] fold)

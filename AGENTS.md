@@ -6,7 +6,7 @@ a downstream project) and **extending** it. Human docs: `README.md`, `docs/`
 `api.json`, design notes and AQL foot-guns in `DX-REPORT.md`.
 
 This library is **pure core AQL** — the four modules import no `aql:*`
-dependencies. Verified against `aql` commit `b6617dd`.
+dependencies. Verified against `aql` commit `db828ec`.
 
 ---
 

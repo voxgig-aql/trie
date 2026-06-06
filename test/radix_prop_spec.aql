@@ -66,7 +66,7 @@ def report fn [
 def specs [
 
   # 1. add then has.
-  (test.prop "add-then-has"
+  (Test.prop "add-then-has"
     [ r.string charset (r.int 1 12) ]
     [ var [[key]
         def s ((RadixSet.make) key RadixSet.add)
@@ -74,12 +74,12 @@ def specs [
     ] ])
 
   # 2. empty has nothing.
-  (test.prop "empty-has-nothing"
+  (Test.prop "empty-has-nothing"
     [ r.string charset (r.int 1 12) ]
     [ var [[key] ((RadixSet.make) key RadixSet.has) not ] ])
 
   # 3. set then get.
-  (test.prop "set-then-get"
+  (Test.prop "set-then-get"
     [ do { k: [r.string charset (r.int 1 12)], v: [r.int 0 1000] } ]
     [ var [[in]
         def k (in "k" get)
@@ -89,7 +89,7 @@ def specs [
     ] ])
 
   # 4. all inserted keys present.
-  (test.prop "bulk-all-present"
+  (Test.prop "bulk-all-present"
     [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 1 15) ]
     [ var [[keys]
         def s (keys radix-of)
@@ -97,7 +97,7 @@ def specs [
     ] ])
 
   # 5. prefix soundness.
-  (test.prop "prefix-sound"
+  (Test.prop "prefix-sound"
     [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 1 15) ]
     [ var [[keys]
         def s (keys radix-of)
@@ -107,7 +107,7 @@ def specs [
     ] ])
 
   # 6. delete removes exactly one.
-  (test.prop "delete-removes-one"
+  (Test.prop "delete-removes-one"
     [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 2 15) ]
     [ var [[keys]
         def s (keys radix-of)
@@ -121,7 +121,7 @@ def specs [
 
   # 7. CROSS-CHECK: a RadixSet and a TrieSet over identical keys expose the
   #    same sorted key list. Compression must be behaviour-preserving.
-  (test.prop "radix-matches-trie"
+  (Test.prop "radix-matches-trie"
     [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 1 20) ]
     [ var [[keys]
         def r (keys radix-of)
@@ -130,7 +130,7 @@ def specs [
     ] ])
 
   # 8. longest-prefix over nested keys returns the longest stored prefix.
-  (test.prop "longest-prefix-nested"
+  (Test.prop "longest-prefix-nested"
     [ r.string charset 10 ]
     [ var [[s]
         def k1 (s slice 0 2)
@@ -142,12 +142,12 @@ def specs [
 ]
 
 
-def _ (specs each [ var [[s] (s test.run-property) report 0 ] ])
+def _ (specs each [ var [[s] (s Test.run-property) report 0 ] ])
 
 
 # --- summary -------------------------------------------------------
 
 "---" print
-"fail count: " print test.fail-count end print
-0 test.fail-count end assert.equal end
+"fail count: " print Test.fail-count end print
+0 Test.fail-count end Assert.equal end
 "all green" print

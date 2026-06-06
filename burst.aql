@@ -183,12 +183,12 @@ def collect-b fn [
   [node:Map prefix:String acc:List] [List] [
     if (node is-bucket) [
       acc (node "items" get) [
-        var [[pair a] def np ([prefix (pair get 0)] concat) a np push ]
+        var [[pair a] def np (prefix (pair get 0) add) a np push ]
       ] fold
     ] [
       def acc1 (if (node "end" get) [acc prefix push] [acc])
       acc1 (node "kids" get) [
-        var [[pair a] def np ([prefix (pair get 0)] concat) (a np (pair get 1) collect-b) ]
+        var [[pair a] def np (prefix (pair get 0) add) (a np (pair get 1) collect-b) ]
       ] fold
     ]
   ]
@@ -203,7 +203,7 @@ def navigate-prefix fn [
         acc (node "items" get) [
           var [[pair a]
             def suf (pair get 0)
-            if (suf prefix starts-with) [ def np ([consumed suf] concat) a np push ] [a]
+            if (suf prefix starts-with) [ def np (consumed suf add) a np push ] [a]
           ]
         ] fold
       ] [
@@ -211,7 +211,7 @@ def navigate-prefix fn [
         def rest (prefix slice 1 (prefix size))
         def child (node ch find-kid)
         if (child eq none) [acc] [
-          def nc ([consumed ch] concat)
+          def nc (consumed ch add)
           (acc nc rest child navigate-prefix)
         ]
       ]
@@ -228,7 +228,7 @@ def longest-b fn [
         var [[pair acc]
           def suf (pair get 0)
           if (key suf starts-with) [
-            def cand ([consumed suf] concat)
+            def cand (consumed suf add)
             def acclen (if (acc eq none) [-1] [acc size])
             if ((cand size) gt acclen) [cand] [acc]
           ] [acc]
@@ -241,7 +241,7 @@ def longest-b fn [
         def rest (key slice 1 (key size))
         def child (node ch find-kid)
         if (child eq none) [best2] [
-          def nc ([consumed ch] concat)
+          def nc (consumed ch add)
           (best2 nc rest child longest-b)
         ]
       ]

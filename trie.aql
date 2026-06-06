@@ -295,7 +295,7 @@ def fuzzy-go fn [
         def c     (pair get 0)
         def child (pair get 1)
         def row   (c query prow build-row)
-        def np    ([prefix c] concat)
+        def np    (prefix c add)
         def last  (row get ((query size)))
         def a1 (if ((child "end" get) and (last lte k)) [a np push] [a])
         if ((row list-min) lte k) [ (a1 np row k query child fuzzy-go) ] [a1]
@@ -309,8 +309,8 @@ def fuzzy-go fn [
 def trie-within fn [
   [k:Integer query:String node:Map] [List] [
     def row0 (iota ((query size) 1 add))
-    def base (if ((node "end" get) and ((query size) lte k)) [ [] "" push ] [[]])
-    (base "" row0 k query node fuzzy-go) sort
+    def seed (if ((node "end" get) and ((query size) lte k)) [ [] "" push ] [[]])
+    (seed "" row0 k query node fuzzy-go) sort
   ]
 ]
 
@@ -331,7 +331,7 @@ def match-go fn [
       if (p0 "?" eq) [
         acc (node "kids" get) [
           var [[pair a]
-            def np ([prefix (pair get 0)] concat)
+            def np (prefix (pair get 0) add)
             (a np prest (pair get 1) match-go)
           ]
         ] fold
@@ -340,14 +340,14 @@ def match-go fn [
           def acc0 (acc prefix prest node match-go)
           acc0 (node "kids" get) [
             var [[pair a]
-              def np ([prefix (pair get 0)] concat)
+              def np (prefix (pair get 0) add)
               (a np pattern (pair get 1) match-go)
             ]
           ] fold
         ] [
           def child (node p0 find-kid)
           if (child eq none) [acc] [
-            def np ([prefix p0] concat)
+            def np (prefix p0 add)
             (acc np prest child match-go)
           ]
         ]

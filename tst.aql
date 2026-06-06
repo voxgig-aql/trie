@@ -133,7 +133,7 @@ def collect-t fn [
   [node:Any prefix:String acc:List] [List] [
     if (node eq none) [acc] [
       def a1 (acc prefix (node "lo" get) collect-t)
-      def pc ([prefix (node "ch" get)] concat)
+      def pc (prefix (node "ch" get) add)
       def a2 (if (node "end" get) [a1 pc push] [a1])
       def a3 (a2 pc (node "mid" get) collect-t)
       a3 prefix (node "hi" get) collect-t
@@ -150,7 +150,7 @@ def longest-t fn [
       def ndc (node "ch" get)
       if (c ndc lt) [ best consumed key (node "lo" get) longest-t ] [
         if (c ndc gt) [ best consumed key (node "hi" get) longest-t ] [
-          def pc ([consumed c] concat)
+          def pc (consumed c add)
           def best2 (if (node "end" get) [pc] [best])
           def rest (key slice 1 (key size))
           if ((rest size) eq 0) [best2] [ best2 pc rest (node "mid" get) longest-t ]

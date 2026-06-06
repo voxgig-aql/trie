@@ -38,7 +38,7 @@ aql -version
 aql test/smoke.aql
 ```
 
-This library is verified against aql commit `b6617dd`; the CI workflow
+This library is verified against aql commit `db828ec`; the CI workflow
 (`ci/test.yml`) pins the same commit.
 
 ---

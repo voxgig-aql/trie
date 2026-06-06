@@ -197,7 +197,7 @@ def collect-r fn [
     def acc2 (if (node "end" get) [acc pfx push] [acc])
     acc2 (node "kids" get) [
       var [[pair a]
-        def np ([pfx (pair get 0)] concat)
+        def np (pfx (pair get 0) add)
         (a np (pair get 1) collect-r)
       ]
     ] fold
@@ -216,12 +216,12 @@ def collect-prefix fn [
         def p (lab prefix common-len)
         if (p (prefix size) eq) [
           # prefix runs out within this edge: everything under it qualifies
-          def np ([apath lab] concat)
+          def np (apath lab add)
           (acc np c collect-r)
         ] [
           if (p (lab size) eq) [
             # whole label consumed: continue with the remaining prefix
-            def np ([apath lab] concat)
+            def np (apath lab add)
             def rp (prefix slice p (prefix size))
             (acc np rp c collect-prefix)
           ] [acc]
@@ -244,7 +244,7 @@ def longest-r fn [
         def c (edge get 1)
         def p (lab key common-len)
         if (p (lab size) eq) [
-          def np ([apath lab] concat)
+          def np (apath lab add)
           def rk (key slice p (key size))
           (best2 np rk c longest-r)
         ] [best2]
@@ -295,7 +295,7 @@ def radix-delete fn [
             def gk (newc "kids" get)
             if (((newc "end" get) not) and ((gk size) eq 1)) [
               def gpair  (gk get 0)
-              def mlabel ([lab (gpair get 0)] concat)
+              def mlabel (lab (gpair get 0) add)
               def gchild (gpair get 1)
               (node lab mlabel gchild set-edge)
             ] [ node lab lab newc set-edge ]
