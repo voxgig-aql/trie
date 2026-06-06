@@ -8,9 +8,9 @@
 #   aql test/radix_prop_spec.aql
 
 
-"aql:test"    import end
-"./radix.aql" import end
-"./trie.aql"  import end
+import "aql:test"
+import "./radix.aql"
+import "./trie.aql"
 
 
 def charset "abcdefghijklmnopqrstuvwxyz"
@@ -26,13 +26,13 @@ def starts-with fn [
 
 def radix-of fn [
   [keys:List] [Map] [
-    (RadixSet.make end) keys [ var [[k acc] acc k RadixSet.add end ] ] fold
+    (RadixSet.make) keys [ var [[k acc] acc k RadixSet.add end ] ] fold
   ]
 ]
 
 def trie-of fn [
   [keys:List] [Map] [
-    (TrieSet.make end) keys [ var [[k acc] acc k TrieSet.add end ] ] fold
+    (TrieSet.make) keys [ var [[k acc] acc k TrieSet.add end ] ] fold
   ]
 ]
 
@@ -66,30 +66,30 @@ def report fn [
 def specs [
 
   # 1. add then has.
-  (test.prop "add-then-has"
+  (Test.prop "add-then-has"
     [ r.string charset (r.int 1 12) ]
     [ var [[key]
-        def s ((RadixSet.make end) key RadixSet.add end)
-        (s key RadixSet.has end)
+        def s ((RadixSet.make) key RadixSet.add)
+        (s key RadixSet.has)
     ] ])
 
   # 2. empty has nothing.
-  (test.prop "empty-has-nothing"
+  (Test.prop "empty-has-nothing"
     [ r.string charset (r.int 1 12) ]
-    [ var [[key] ((RadixSet.make end) key RadixSet.has end) not ] ])
+    [ var [[key] ((RadixSet.make) key RadixSet.has) not ] ])
 
   # 3. set then get.
-  (test.prop "set-then-get"
+  (Test.prop "set-then-get"
     [ do { k: [r.string charset (r.int 1 12)], v: [r.int 0 1000] } ]
     [ var [[in]
         def k (in "k" get)
         def v (in "v" get)
-        def t ((RadixMap.make end) k v RadixMap.set end)
-        (t k RadixMap.get end) v eq
+        def t ((RadixMap.make) k v RadixMap.set)
+        (t k RadixMap.get) v eq
     ] ])
 
   # 4. all inserted keys present.
-  (test.prop "bulk-all-present"
+  (Test.prop "bulk-all-present"
     [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 1 15) ]
     [ var [[keys]
         def s (keys radix-of)
@@ -97,57 +97,57 @@ def specs [
     ] ])
 
   # 5. prefix soundness.
-  (test.prop "prefix-sound"
+  (Test.prop "prefix-sound"
     [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 1 15) ]
     [ var [[keys]
         def s (keys radix-of)
         def p (keys get 0)
-        def hits (s p RadixSet.with-prefix end)
+        def hits (s p RadixSet.with-prefix)
         hits p all-have-prefix
     ] ])
 
   # 6. delete removes exactly one.
-  (test.prop "delete-removes-one"
+  (Test.prop "delete-removes-one"
     [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 2 15) ]
     [ var [[keys]
         def s (keys radix-of)
         def k (keys get 0)
-        def before (s RadixSet.size end)
-        def s2 (s k RadixSet.delete end)
-        def gone ((s2 k RadixSet.has end) not)
-        def smaller ((s2 RadixSet.size end) (before 1 sub) eq)
+        def before (s RadixSet.size)
+        def s2 (s k RadixSet.delete)
+        def gone ((s2 k RadixSet.has) not)
+        def smaller ((s2 RadixSet.size) (before 1 sub) eq)
         gone smaller and
     ] ])
 
   # 7. CROSS-CHECK: a RadixSet and a TrieSet over identical keys expose the
   #    same sorted key list. Compression must be behaviour-preserving.
-  (test.prop "radix-matches-trie"
+  (Test.prop "radix-matches-trie"
     [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 1 20) ]
     [ var [[keys]
         def r (keys radix-of)
         def t (keys trie-of)
-        (r RadixSet.keys end) (t TrieSet.keys end) list-eq
+        (r RadixSet.keys) (t TrieSet.keys) list-eq
     ] ])
 
   # 8. longest-prefix over nested keys returns the longest stored prefix.
-  (test.prop "longest-prefix-nested"
+  (Test.prop "longest-prefix-nested"
     [ r.string charset 10 ]
     [ var [[s]
         def k1 (s slice 0 2)
         def k2 (s slice 0 5)
-        def t (((RadixSet.make end) k1 RadixSet.add end) k2 RadixSet.add end)
-        (t s RadixSet.longest-prefix end) k2 eq
+        def t (((RadixSet.make) k1 RadixSet.add) k2 RadixSet.add)
+        (t s RadixSet.longest-prefix) k2 eq
     ] ])
 
 ]
 
 
-def _ (specs each [ var [[s] (s test.run-property end) report 0 ] ])
+def _ (specs each [ var [[s] (s Test.run-property) report 0 ] ])
 
 
 # --- summary -------------------------------------------------------
 
 "---" print
-"fail count: " print test.fail-count end print
-0 test.fail-count end assert.equal end
+"fail count: " print Test.fail-count end print
+0 Test.fail-count end Assert.equal end
 "all green" print

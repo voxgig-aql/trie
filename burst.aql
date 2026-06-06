@@ -17,24 +17,22 @@
 #
 # A node is one of two tagged Maps:
 #
-#   bucket: { kind: "bucket", items: [[suffix, vbox], …] }
-#   trie:   { kind: "trie", end: Boolean, val: vbox, kids: [[char, node], …] }
+#   bucket: { kind: "bucket", items: [[suffix, value], …] }
+#   trie:   { kind: "trie", end: Boolean, val: Any, kids: [[char, node], …] }
 #
 # A bucket holds the *remaining* suffixes of keys routed to it, paired with
-# their boxed values. A trie node routes by one character and may itself end
+# their values. A trie node routes by one character and may itself end
 # a key. The empty tree is an empty bucket, so a tree is always a Map.
 #
-# Values are stored *boxed* (in a one-element list) so the `do {…}`
-# constructor never evaluates a String value that names a word. Trees are
-# PERSISTENT: mutators return a new tree. Paths are assembled with `concat`.
+# Trees are PERSISTENT: mutators return a new tree. Paths are assembled with
+# core `add` (string concatenation). Membership is structural (`b-member`), so
+# a stored `none` value stays distinct from an absent key.
 #
-# Imported via `"./burst.aql" import end`.
+# Imported via `import "./burst.aql"`.
 
 
-# --- boxing + constants ---------------------------------------------
+# --- constants ------------------------------------------------------
 
-def box   fn [ [val:Any] [List] [ [] val push ] ]
-def unbox fn [ [b:Any] [Any] [ if ((b size) eq 0) [none] [b get 0] ] ]
 
 # Maximum bucket size before it bursts. Small enough to keep buckets flat;
 # the exact value only trades bucket scans against trie depth.
@@ -45,11 +43,10 @@ def burst-limit fn [ [] [Integer] [8] ]
 
 def mk-bucket fn [ [items:Any] [Map] [ do {kind: ["bucket"], items: [items]} ] ]
 
-# `vbox` is an already-boxed value; `fin` the terminal flag (named `fin`,
-# not the reserved `end`). Call: `kids vbox fin mk-trienode`.
+# `fin` is the terminal flag (named `fin`, not the reserved `end`). Call: `kids val fin mk-trienode`.
 def mk-trienode fn [
-  [fin:Any vbox:Any kids:Any] [Map] [
-    do {kind: ["trie"], end: [fin], val: [vbox], kids: [kids]}
+  [fin:Any val:Any kids:Any] [Map] [
+    do {kind: ["trie"], end: [fin], val: [val], kids: [kids]}
   ]
 ]
 
@@ -68,7 +65,7 @@ def is-empty fn [
 
 # --- bucket + child helpers -----------------------------------------
 
-# The boxed value stored under `key` in a bucket's items, or `none`.
+# The value stored under `key` in a bucket's items, or `none`.
 # Call: `items key bucket-find`.
 def bucket-find fn [
   [key:String items:List] [Any] [
@@ -76,12 +73,12 @@ def bucket-find fn [
   ]
 ]
 
-# Items with `key` set to `vbox` (replacing any existing entry).
-# Call: `items key vbox bucket-set`.
+# Items with `key` set to `val` (replacing any existing entry).
+# Call: `items key val bucket-set`.
 def bucket-set fn [
-  [vbox:Any key:String items:List] [List] [
+  [val:Any key:String items:List] [List] [
     def kept ([] items [ var [[pair acc] if ((pair get 0) key eq) [acc] [acc pair push] ] ] fold)
-    kept [key vbox] push
+    kept [key val] push
   ]
 ]
 
@@ -119,21 +116,21 @@ def drop-kid fn [
 
 # --- core: insert + burst -------------------------------------------
 
-# Insert `key` → `vbox` (already boxed) into `node`. A bucket that overflows
-# bursts into a trie node. Call: `node key vbox b-insert`.
+# Insert `key` → `val` into `node`. A bucket that overflows
+# bursts into a trie node. Call: `node key val b-insert`.
 def b-insert fn [
-  [vbox:Any key:String node:Map] [Map] [
+  [val:Any key:String node:Map] [Map] [
     if (node is-bucket) [
-      def items2 ((node "items" get) key vbox bucket-set)
+      def items2 ((node "items" get) key val bucket-set)
       if ((items2 size) gt (burst-limit)) [ items2 b-burst ] [ items2 mk-bucket ]
     ] [
-      if ((key size) eq 0) [ (node "kids" get) vbox true mk-trienode ] [
+      if ((key size) eq 0) [ (node "kids" get) val true mk-trienode ] [
         def ch (key slice 0 1)
         def rest (key slice 1 (key size))
         def child (node ch find-kid)
         def child2 (if (child eq none)
-          [ ([] mk-bucket) rest vbox b-insert ]
-          [ child rest vbox b-insert ])
+          [ ([] mk-bucket) rest val b-insert ]
+          [ child rest val b-insert ])
         node ch child2 put-kid
       ]
     ]
@@ -152,15 +149,39 @@ def b-burst fn [
 
 # --- core: locate ---------------------------------------------------
 
-# The boxed value for `key`, or `none` if absent. Call: `node key b-getbox`.
-def b-getbox fn [
+# The value bound to `key`, or `none` if absent. Call: `node key b-getval`.
+# (`none` is ambiguous between absent and a stored `none` value — use
+# `b-member` for membership, which keys off structure, not the value.)
+def b-getval fn [
   [key:String node:Map] [Any] [
     if (node is-bucket) [ (node "items" get) key bucket-find ] [
       if ((key size) eq 0) [ if (node "end" get) [node "val" get] [none] ] [
         def ch (key slice 0 1)
         def rest (key slice 1 (key size))
         def child (node ch find-kid)
-        if (child eq none) [none] [ child rest b-getbox ]
+        if (child eq none) [none] [ child rest b-getval ]
+      ]
+    ]
+  ]
+]
+
+# Whether a bucket's items contain `key`. Call: `items key bucket-has`.
+def bucket-has fn [
+  [key:String items:List] [Boolean] [
+    false items [ var [[pair acc] if ((pair get 0) key eq) [true] [acc] ] ] fold
+  ]
+]
+
+# Structural membership for `key` (independent of the stored value, so it is
+# correct even when the value is `none`). Call: `node key b-member`.
+def b-member fn [
+  [key:String node:Map] [Boolean] [
+    if (node is-bucket) [ (node "items" get) key bucket-has ] [
+      if ((key size) eq 0) [ node "end" get ] [
+        def ch (key slice 0 1)
+        def rest (key slice 1 (key size))
+        def child (node ch find-kid)
+        if (child eq none) [false] [ child rest b-member ]
       ]
     ]
   ]
@@ -183,12 +204,12 @@ def collect-b fn [
   [node:Map prefix:String acc:List] [List] [
     if (node is-bucket) [
       acc (node "items" get) [
-        var [[pair a] def np ([prefix (pair get 0)] concat) a np push ]
+        var [[pair a] def np (prefix (pair get 0) add) a np push ]
       ] fold
     ] [
       def acc1 (if (node "end" get) [acc prefix push] [acc])
       acc1 (node "kids" get) [
-        var [[pair a] def np ([prefix (pair get 0)] concat) (a np (pair get 1) collect-b) ]
+        var [[pair a] def np (prefix (pair get 0) add) (a np (pair get 1) collect-b) ]
       ] fold
     ]
   ]
@@ -203,7 +224,7 @@ def navigate-prefix fn [
         acc (node "items" get) [
           var [[pair a]
             def suf (pair get 0)
-            if (suf prefix starts-with) [ def np ([consumed suf] concat) a np push ] [a]
+            if (suf prefix starts-with) [ def np (consumed suf add) a np push ] [a]
           ]
         ] fold
       ] [
@@ -211,7 +232,7 @@ def navigate-prefix fn [
         def rest (prefix slice 1 (prefix size))
         def child (node ch find-kid)
         if (child eq none) [acc] [
-          def nc ([consumed ch] concat)
+          def nc (consumed ch add)
           (acc nc rest child navigate-prefix)
         ]
       ]
@@ -228,7 +249,7 @@ def longest-b fn [
         var [[pair acc]
           def suf (pair get 0)
           if (key suf starts-with) [
-            def cand ([consumed suf] concat)
+            def cand (consumed suf add)
             def acclen (if (acc eq none) [-1] [acc size])
             if ((cand size) gt acclen) [cand] [acc]
           ] [acc]
@@ -241,7 +262,7 @@ def longest-b fn [
         def rest (key slice 1 (key size))
         def child (node ch find-kid)
         if (child eq none) [best2] [
-          def nc ([consumed ch] concat)
+          def nc (consumed ch add)
           (best2 nc rest child longest-b)
         ]
       ]
@@ -297,16 +318,11 @@ def b-delete fn [
 
 def map-make fn [ [] [Map] [ [] mk-bucket ] ]
 
-def map-set fn [ [val:Any key:String t:Map] [Map] [ t key (val box) b-insert ] ]
+def map-set fn [ [val:Any key:String t:Map] [Map] [ t key val b-insert ] ]
 
-def map-get fn [
-  [key:String t:Map] [Any] [
-    def b (t key b-getbox)
-    if (b eq none) [none] [b unbox]
-  ]
-]
+def map-get fn [ [key:String t:Map] [Any] [ t key b-getval ] ]
 
-def map-has fn [ [key:String t:Map] [Boolean] [ ((t key b-getbox) eq none) not ] ]
+def map-has fn [ [key:String t:Map] [Boolean] [ t key b-member ] ]
 
 def map-delete fn [ [key:String t:Map] [Map] [ t key b-delete ] ]
 
@@ -346,7 +362,7 @@ def map-longest-prefix fn [ [key:String t:Map] [Any] [ none "" key t longest-b ]
 # Rebuild a map from a list of [key, value] pairs (inverse of `entries`).
 def map-from-entries fn [
   [entries:List] [Map] [
-    ([] mk-bucket) entries [ var [[e acc] (acc (e get 0) ((e get 1) box) b-insert) ] ] fold
+    ([] mk-bucket) entries [ var [[e acc] (acc (e get 0) (e get 1) b-insert) ] ] fold
   ]
 ]
 
@@ -364,9 +380,9 @@ def map-encode fn [
 
 def set-make fn [ [] [Map] [ [] mk-bucket ] ]
 
-def set-add fn [ [key:String t:Map] [Map] [ t key (true box) b-insert ] ]
+def set-add fn [ [key:String t:Map] [Map] [ t key true b-insert ] ]
 
-def set-has fn [ [key:String t:Map] [Boolean] [ ((t key b-getbox) eq none) not ] ]
+def set-has fn [ [key:String t:Map] [Boolean] [ t key b-member ] ]
 
 def set-delete fn [ [key:String t:Map] [Map] [ t key b-delete ] ]
 
@@ -385,7 +401,7 @@ def set-longest-prefix fn [ [key:String t:Map] [Any] [ none "" key t longest-b ]
 # Rebuild a set from a list of keys (inverse of `keys`).
 def set-from-keys fn [
   [keys:List] [Map] [
-    ([] mk-bucket) keys [ var [[k acc] (acc k (true box) b-insert) ] ] fold
+    ([] mk-bucket) keys [ var [[k acc] (acc k true b-insert) ] ] fold
   ]
 ]
 

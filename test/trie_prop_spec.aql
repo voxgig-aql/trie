@@ -1,9 +1,9 @@
 # Property-based tests for the standard trie — DECLARATIVE SPEC FORMAT.
 #
-# This file exercises aql:test's declarative property surface: `test.prop`
-# builds a PropertySpec as data, and `test.run-property` runs it at the
+# This file exercises aql:test's declarative property surface: `Test.prop`
+# builds a PropertySpec as data, and `Test.run-property` runs it at the
 # default 100 iterations. The sibling file `test/trie_pbt.aql` covers the
-# same ideas through the imperative `test.check-prop` driver.
+# same ideas through the imperative `Test.check-prop` driver.
 #
 # GEN-BODY runs with `r` (a seeded aql:rand instance) in scope and must leave
 # exactly one value on the stack. PROPERTY-BODY takes that value and must
@@ -13,8 +13,8 @@
 #   aql test/trie_prop_spec.aql
 
 
-"aql:test"   import end
-"./trie.aql" import end
+import "aql:test"
+import "./trie.aql"
 
 
 # Lowercase keys keep generated input readable; lengths stay short so the
@@ -34,7 +34,7 @@ def starts-with fn [
 # Build a TrieSet from a list of keys.
 def set-of fn [
   [keys:List] [Map] [
-    (TrieSet.make end) keys [
+    (TrieSet.make) keys [
       var [[k acc] acc k TrieSet.add end ]
     ] fold
   ]
@@ -79,30 +79,30 @@ def report fn [
 def specs [
 
   # 1. add then has: a key just added is always a member.
-  (test.prop "add-then-has"
+  (Test.prop "add-then-has"
     [ r.string charset (r.int 1 12) ]
     [ var [[key]
-        def s ((TrieSet.make end) key TrieSet.add end)
-        (s key TrieSet.has end)
+        def s ((TrieSet.make) key TrieSet.add)
+        (s key TrieSet.has)
     ] ])
 
   # 2. empty set contains nothing.
-  (test.prop "empty-has-nothing"
+  (Test.prop "empty-has-nothing"
     [ r.string charset (r.int 1 12) ]
-    [ var [[key] ((TrieSet.make end) key TrieSet.has end) not ] ])
+    [ var [[key] ((TrieSet.make) key TrieSet.has) not ] ])
 
   # 3. set then get returns exactly the value stored.
-  (test.prop "set-then-get"
+  (Test.prop "set-then-get"
     [ do { k: [r.string charset (r.int 1 12)], v: [r.int 0 1000] } ]
     [ var [[in]
         def k (in "k" get)
         def v (in "v" get)
-        def t ((TrieMap.make end) k v TrieMap.set end)
-        (t k TrieMap.get end) v eq
+        def t ((TrieMap.make) k v TrieMap.set)
+        (t k TrieMap.get) v eq
     ] ])
 
   # 4. every inserted key is present afterwards (bulk no-false-negatives).
-  (test.prop "bulk-all-present"
+  (Test.prop "bulk-all-present"
     [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 1 15) ]
     [ var [[keys]
         def s (keys set-of)
@@ -111,73 +111,73 @@ def specs [
 
   # 5. size never exceeds the number of inserted keys (it equals the
   #    distinct count; duplicates collapse).
-  (test.prop "size-bounded-by-inserts"
+  (Test.prop "size-bounded-by-inserts"
     [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 1 15) ]
     [ var [[keys]
         def s (keys set-of)
-        (s TrieSet.size end) (keys size) lte
+        (s TrieSet.size) (keys size) lte
     ] ])
 
   # 6. prefix soundness: everything keys-with-prefix returns really does
   #    start with that prefix.
-  (test.prop "prefix-sound"
+  (Test.prop "prefix-sound"
     [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 1 15) ]
     [ var [[keys]
         def s (keys set-of)
         def p (keys get 0)
-        def hits (s p TrieSet.with-prefix end)
+        def hits (s p TrieSet.with-prefix)
         hits p all-have-prefix
     ] ])
 
   # 7. after deleting a key it is gone, and the set shrinks by exactly one.
-  (test.prop "delete-removes-one"
+  (Test.prop "delete-removes-one"
     [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 2 15) ]
     [ var [[keys]
         def s (keys set-of)
         def k (keys get 0)
-        def before (s TrieSet.size end)
-        def s2 (s k TrieSet.delete end)
-        def gone ((s2 k TrieSet.has end) not)
-        def smaller ((s2 TrieSet.size end) (before 1 sub) eq)
+        def before (s TrieSet.size)
+        def s2 (s k TrieSet.delete)
+        def gone ((s2 k TrieSet.has) not)
+        def smaller ((s2 TrieSet.size) (before 1 sub) eq)
         gone smaller and
     ] ])
 
   # 8. fuzzy soundness: every key returned by `within` is a real member.
   #    The query is an actual key, so the result is never empty.
-  (test.prop "within-subset"
+  (Test.prop "within-subset"
     [ r.list-of [ r.string charset (r.int 1 6) ] (r.int 1 12) ]
     [ var [[keys]
         def s (keys set-of)
-        def hits (s (keys get 0) 2 TrieSet.within end)
+        def hits (s (keys get 0) 2 TrieSet.within)
         hits s all-members
     ] ])
 
   # 9. within 0 of a stored key is exactly that key.
-  (test.prop "within-zero-is-exact"
+  (Test.prop "within-zero-is-exact"
     [ r.list-of [ r.string charset (r.int 1 6) ] (r.int 1 12) ]
     [ var [[keys]
         def s (keys set-of)
         def q (keys get 0)
-        def z (s q 0 TrieSet.within end)
+        def z (s q 0 TrieSet.within)
         z ([] q push) list-eq
     ] ])
 
   # 10. wildcard soundness: every key matching a pattern is a real member.
-  (test.prop "match-subset"
+  (Test.prop "match-subset"
     [ r.list-of [ r.string charset (r.int 1 6) ] (r.int 1 12) ]
     [ var [[keys]
         def s (keys set-of)
-        def pat ([ (keys get 0) "*" ] concat)
-        def hits (s pat TrieSet.match end)
+        def pat ( (keys get 0) "*"  add)
+        def hits (s pat TrieSet.match)
         hits s all-members
     ] ])
 
   # 11. from-keys round-trips: rebuilding from extracted keys is identical.
-  (test.prop "from-keys-roundtrip"
+  (Test.prop "from-keys-roundtrip"
     [ r.list-of [ r.string charset (r.int 1 6) ] (r.int 1 12) ]
     [ var [[keys]
-        def viaadd  ((keys set-of) TrieSet.keys end)
-        def viafrom ((keys TrieSet.from-keys end) TrieSet.keys end)
+        def viaadd  ((keys set-of) TrieSet.keys)
+        def viafrom ((keys TrieSet.from-keys) TrieSet.keys)
         viaadd viafrom list-eq
     ] ])
 
@@ -185,13 +185,13 @@ def specs [
 
 
 def _ (specs each [
-  var [[s] (s test.run-property end) report 0 ]
+  var [[s] (s Test.run-property) report 0 ]
 ])
 
 
 # --- summary -------------------------------------------------------
 
 "---" print
-"fail count: " print test.fail-count end print
-0 test.fail-count end assert.equal end
+"fail count: " print Test.fail-count end print
+0 Test.fail-count end Assert.equal end
 "all green" print

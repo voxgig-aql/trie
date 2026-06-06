@@ -21,31 +21,24 @@
 # --- representation -------------------------------------------------
 #
 # A node is a Map { ch, end, val, lo, mid, hi }; an empty tree is `none`.
-# The middle child is named "mid" (not "eq") because `eq` is a builtin word
-# and would shadow the binding. Values are stored *boxed* (in a one-element
-# list) so the `do {…}` node constructor never evaluates a String value that
-# happens to name a word ("do", "if", …); `box`/`unbox` wrap and unwrap.
+# The middle child is named "mid" (not "eq") because `eq` is a builtin word and
+# would shadow the binding.
 #
 # TSTs here are PERSISTENT: every mutator returns a new tree, rebuilding the
-# nodes along the edited path. Paths are assembled with `concat`.
+# nodes along the edited path. Paths are assembled with core `add`.
 #
-# Imported via `"./tst.aql" import end`.
-
-
-# --- boxing ---------------------------------------------------------
-
-def box fn [ [val:Any] [List] [ [] val push ] ]
-
-def unbox fn [ [b:Any] [Any] [ if ((b size) eq 0) [none] [b get 0] ] ]
+# Imported via `import "./tst.aql"`.
 
 
 # --- node construction ----------------------------------------------
 
-# Build a node. `vbox` is an already-boxed value, `fin` the terminal flag
-# (named `fin`, not `end`, which is reserved). Call: `ch fin vbox lo mid hi mk-tnode`.
+# Build a node. `fin` is the terminal flag (named `fin`, not `end`, which is
+# reserved). Values are stored directly (aql `db828ec` no longer evaluates
+# `do {…}` map values, so the old box is gone).
+# Call: `ch fin val lo mid hi mk-tnode`.
 def mk-tnode fn [
-  [hi:Any mid:Any lo:Any vbox:Any fin:Any ch:String] [Map] [
-    do {ch: [ch], end: [fin], val: [vbox], lo: [lo], mid: [mid], hi: [hi]}
+  [hi:Any mid:Any lo:Any val:Any fin:Any ch:String] [Map] [
+    do {ch: [ch], end: [fin], val: [val], lo: [lo], mid: [mid], hi: [hi]}
   ]
 ]
 
@@ -54,10 +47,10 @@ def with-lo  fn [ [lo:Any node:Map] [Map] [ (node "ch" get) (node "end" get) (no
 def with-mid fn [ [mid:Any node:Map] [Map] [ (node "ch" get) (node "end" get) (node "val" get) (node "lo" get) mid (node "hi" get) mk-tnode ] ]
 def with-hi  fn [ [hi:Any node:Map] [Map] [ (node "ch" get) (node "end" get) (node "val" get) (node "lo" get) (node "mid" get) hi mk-tnode ] ]
 
-# Replace the terminal flag and (boxed) value. Call: `node vbox fin with-end-val`.
+# Replace the terminal flag and value. Call: `node val fin with-end-val`.
 def with-end-val fn [
-  [fin:Any vbox:Any node:Map] [Map] [
-    (node "ch" get) fin vbox (node "lo" get) (node "mid" get) (node "hi" get) mk-tnode
+  [fin:Any val:Any node:Map] [Map] [
+    (node "ch" get) fin val (node "lo" get) (node "mid" get) (node "hi" get) mk-tnode
   ]
 ]
 
@@ -69,7 +62,7 @@ def with-end-val fn [
 def tst-insert fn [
   [val:Any key:String node:Any] [Any] [
     def c (key slice 0 1)
-    def nd (if (node eq none) [ c false [] none none none mk-tnode ] [node])
+    def nd (if (node eq none) [ c false none none none none mk-tnode ] [node])
     def ndc (nd "ch" get)
     if (c ndc lt) [
       def lo2 ((nd "lo" get) key val tst-insert) (nd lo2 with-lo)
@@ -78,7 +71,7 @@ def tst-insert fn [
         def hi2 ((nd "hi" get) key val tst-insert) (nd hi2 with-hi)
       ] [
         def rest (key slice 1 (key size))
-        if ((rest size) eq 0) [ (nd (val box) true with-end-val) ] [
+        if ((rest size) eq 0) [ (nd val true with-end-val) ] [
           def mid2 ((nd "mid" get) rest val tst-insert) (nd mid2 with-mid)
         ]
       ]
@@ -99,7 +92,7 @@ def tst-get fn [
         if (c ndc gt) [ (node "hi" get) key tst-get ] [
           def rest (key slice 1 (key size))
           if ((rest size) eq 0)
-            [ if (node "end" get) [(node "val" get) unbox] [none] ]
+            [ if (node "end" get) [node "val" get] [none] ]
             [ (node "mid" get) rest tst-get ]
         ]
       ]
@@ -133,7 +126,7 @@ def collect-t fn [
   [node:Any prefix:String acc:List] [List] [
     if (node eq none) [acc] [
       def a1 (acc prefix (node "lo" get) collect-t)
-      def pc ([prefix (node "ch" get)] concat)
+      def pc (prefix (node "ch" get) add)
       def a2 (if (node "end" get) [a1 pc push] [a1])
       def a3 (a2 pc (node "mid" get) collect-t)
       a3 prefix (node "hi" get) collect-t
@@ -150,7 +143,7 @@ def longest-t fn [
       def ndc (node "ch" get)
       if (c ndc lt) [ best consumed key (node "lo" get) longest-t ] [
         if (c ndc gt) [ best consumed key (node "hi" get) longest-t ] [
-          def pc ([consumed c] concat)
+          def pc (consumed c add)
           def best2 (if (node "end" get) [pc] [best])
           def rest (key slice 1 (key size))
           if ((rest size) eq 0) [best2] [ best2 pc rest (node "mid" get) longest-t ]

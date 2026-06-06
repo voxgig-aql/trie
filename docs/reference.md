@@ -19,10 +19,10 @@ engine:
 Import the variant you want:
 
 ```aql
-"./trie.aql"  import end
-"./radix.aql" import end
-"./tst.aql"   import end
-"./burst.aql" import end
+import "./trie.aql"
+import "./radix.aql"
+import "./tst.aql"
+import "./burst.aql"
 ```
 
 A consuming script does **not** need to import anything else; each module
@@ -32,14 +32,19 @@ pulls in its own dependencies.
 
 ## Calling convention
 
-Every operation is a forward-dispatched word and must be terminated with
-`end` (or wrapped in parentheses) at the call site, e.g.
-`t "x" TrieSet.add end` or `(t "x" TrieSet.add)`. Without a terminator the
-word collects the following token as an argument. This is general AQL
-forward-precedence behaviour, not specific to this library.
+Operations are forward-dispatched words: a word takes the tokens after it as
+arguments, stops at the next function word or a closing paren, and otherwise
+draws from the stack — so a terminator is usually unnecessary
+(`(t "x" TrieSet.add)` and `t "x" TrieSet.has print` both resolve). The one
+case that needs disambiguation is a bare, type-compatible literal immediately
+following a call with nothing between; resolve it with parens, a trailing
+`end`, or the `/s` modifier, which forces stack-arg resolution. This is general
+AQL forward-precedence behaviour, not specific to this library.
 
 The receiver (the trie) is written first and the arguments follow:
-`t key value Map.set end`. Keys are Strings; values may be any type.
+`t key value Map.set`. Keys are Strings; values may be any type. The call
+forms below show a trailing `end` for clarity; it is optional in the common
+case above.
 
 ### Immutability
 
@@ -47,7 +52,7 @@ Tries are **persistent**. `add`, `set`, and `delete` return a *new* trie
 and leave the argument unchanged; bind the result:
 
 ```aql
-def t1 (t0 "a" TrieSet.add end)   # t0 is still whatever it was
+def t1 (t0 "a" TrieSet.add)   # t0 is still whatever it was
 ```
 
 ### The trie value
@@ -248,8 +253,8 @@ subtree as soon as its whole row exceeds `k`.
 | **Returns** | `List` of keys within distance `k`, sorted |
 
 ```aql
-def t (((TrieSet.make end) "cat" TrieSet.add end) "car" TrieSet.add end)
-(t "cat" 1 TrieSet.within end) print   # => ["car", "cat"]
+def t (((TrieSet.make) "cat" TrieSet.add) "car" TrieSet.add)
+(t "cat" 1 TrieSet.within) print   # => ["car", "cat"]
 ```
 
 ### `match` — wildcard search
@@ -265,8 +270,8 @@ a literal.
 | **Returns** | `List` of matching keys, sorted |
 
 ```aql
-(t "ca?" TrieSet.match end) print   # => ["car", "cat"]
-(t "c*"  TrieSet.match end) print   # => ["car", "cat"]
+(t "ca?" TrieSet.match) print   # => ["car", "cat"]
+(t "c*"  TrieSet.match) print   # => ["car", "cat"]
 ```
 
 ---

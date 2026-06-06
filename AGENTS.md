@@ -6,7 +6,7 @@ a downstream project) and **extending** it. Human docs: `README.md`, `docs/`
 `api.json`, design notes and AQL foot-guns in `DX-REPORT.md`.
 
 This library is **pure core AQL** — the four modules import no `aql:*`
-dependencies. Verified against `aql` commit `b6617dd`.
+dependencies. Verified against `aql` commit `db828ec`.
 
 ---
 
@@ -16,15 +16,15 @@ dependencies. Verified against `aql` commit `b6617dd`.
 `tst.aql`, `burst.aql`) into the consumer project, e.g. `lib/trie/`, then:
 
 ```aql
-"./lib/trie/trie.aql" import end
+import "./lib/trie/trie.aql"
 ```
 
 Imports resolve **relative to the working directory** (where you invoke `aql`),
 *not* the importing file — so run `aql` from the project root and write paths
 relative to it.
 
-**Registry.** If published: `aql install trie-<version>`, then `"trie" import
-end` loads the package `main` (`trie.aql` → `TrieMap`/`TrieSet`); import other
+**Registry.** If published: `aql install trie-<version>`, then `import "trie"`
+loads the package `main` (`trie.aql` → `TrieMap`/`TrieSet`); import other
 variants by their file.
 
 Each module is self-contained — vendor only the variant(s) you use.
@@ -33,15 +33,25 @@ Each module is self-contained — vendor only the variant(s) you use.
 
 ## Calling convention (read this first)
 
-- **Receiver first, then arguments:** `t key value TrieMap.set end`.
-- **Terminate every call** with `end` (or wrap it in parens). Without it, the
-  word swallows the next token. `(t "x" TrieSet.has)` and `t "x" TrieSet.has
-  end` are equivalent.
+- **Forward arguments have precedence.** A word grabs the tokens *after* it as
+  arguments, stops at the next function word or a closing paren, and otherwise
+  takes what it needs from the stack. So a terminator is usually unnecessary:
+  `import "./trie.aql"`, `(t "x" TrieSet.has)`, and `t "x" TrieSet.has print`
+  all resolve on their own.
+- **Receiver first for the trie words** — a convention that makes results pipe:
+  `t key value TrieMap.set`. Each `add`/`set`/`delete` returns a new trie, so
+  the receiver threads through chains and folds.
+- **Disambiguate only when a bare literal follows a call.** If a type-compatible
+  literal sits immediately after a stack-form call with no word or paren
+  between, forward-precedence will consume it. Resolve it with parens, a
+  trailing `end`, or the **`/s` modifier**, which pins that call to stack args:
+  `5 5 cmp/s 9` compares `5` and `5` (leaving `9`), whereas `5 5 cmp 9`
+  forward-grabs the `9`.
 - **Tries are immutable.** `add` / `set` / `delete` return a *new* trie and
   leave the input unchanged — **always rebind the result**:
 
   ```aql
-  def t1 (t0 "cat" TrieSet.add end)   # t0 is unchanged; use t1
+  def t1 (t0 "cat" TrieSet.add)   # t0 is unchanged; use t1
   ```
 
 ---
@@ -63,42 +73,42 @@ The variants are behaviourally identical (the property suite cross-checks them);
 ## Essential patterns (copy-paste, runnable)
 
 ```aql
-"./trie.aql" import end
+import "./trie.aql"
 
 # Build a set from a list of keys (fold; each add returns the next trie).
 # fold runs `init list [body] fold`; the body gets each key `w` and the
 # accumulator `acc`, and returns the next trie.
 def words ["apple" "app" "apply" "banana"]
-def s ((TrieSet.make end) words [ var [[w acc] acc w TrieSet.add end ] ] fold)
+def s ((TrieSet.make) words [ var [[w acc] acc w TrieSet.add end ] ] fold)
 
 # Membership.
-(s "app" TrieSet.has end) print            # => true
-(s "ap"  TrieSet.has end) print             # => false  (a prefix is not a member)
+(s "app" TrieSet.has) print            # => true
+(s "ap"  TrieSet.has) print             # => false  (a prefix is not a member)
 
 # Autocomplete: every key under a prefix, sorted.
-(s "app" TrieSet.with-prefix end) print     # => ["app", "apple", "apply"]
+(s "app" TrieSet.with-prefix) print     # => ["app", "apple", "apply"]
 
 # Longest stored key that prefixes a query.
-(s "applesauce" TrieSet.longest-prefix end) print   # => "apple"
+(s "applesauce" TrieSet.longest-prefix) print   # => "apple"
 
 # Delete (rebind; keys below the deleted one survive).
-def s2 (s "app" TrieSet.delete end)
-(s2 "app"   TrieSet.has end) print           # => false
-(s2 "apple" TrieSet.has end) print           # => true
+def s2 (s "app" TrieSet.delete)
+(s2 "app"   TrieSet.has) print           # => false
+(s2 "apple" TrieSet.has) print           # => true
 
 # Map: bind values (any type) to keys.
-def m (((TrieMap.make end) "GET" 1 TrieMap.set end) "POST" 2 TrieMap.set end)
-(m "GET"    TrieMap.get end) print           # => 1
-(m "DELETE" TrieMap.get end) print           # => None  (absent — not an error)
-(m TrieMap.entries end) print                # => [["GET" 1] ["POST" 2]]  (sorted)
+def m (((TrieMap.make) "GET" 1 TrieMap.set) "POST" 2 TrieMap.set)
+(m "GET"    TrieMap.get) print           # => 1
+(m "DELETE" TrieMap.get) print           # => None  (absent — not an error)
+(m TrieMap.entries) print                # => [["GET" 1] ["POST" 2]]  (sorted)
 
 # Fuzzy (edit-distance) and wildcard search — STANDARD TRIE ONLY.
-(s "aple" 1 TrieSet.within end) print        # keys within Levenshtein distance 1
-(s "ap*"  TrieSet.match end) print            # `?` = one char, `*` = any run
+(s "aple" 1 TrieSet.within) print        # keys within Levenshtein distance 1
+(s "ap*"  TrieSet.match) print            # `?` = one char, `*` = any run
 
 # Persist + rebuild (there is no string `decode`).
-def snapshot (m TrieMap.entries end)         # serialize these however you like
-def m2 (snapshot TrieMap.from-entries end)   # …and rebuild later  (sets: keys + from-keys)
+def snapshot (m TrieMap.entries)         # serialize these however you like
+def m2 (snapshot TrieMap.from-entries)   # …and rebuild later  (sets: keys + from-keys)
 ```
 
 ---
@@ -126,8 +136,11 @@ Exact call-forms, arg order, and return types: `api.json` (structured) and
 ## Rules the agent MUST follow
 
 1. **Rebind** the result of `add`/`set`/`delete` — tries never mutate in place.
-2. **Terminate** every call with `end` or parens.
-3. **Receiver-first** argument order: `t key value Map.set end`.
+2. **Receiver-first** argument order for the trie words: `t key value Map.set`
+   (a convention so results pipe through chains and folds).
+3. **Forward args have precedence**; a call resolves at the next function word
+   or paren. Add parens, `end`, or `/s` (force stack) only to stop a bare
+   following literal from being grabbed as an argument.
 4. `keys`, `values`, `entries`, `with-prefix`, `keys-with-prefix` are **sorted**.
 5. `get` returns `none` and `has` returns `false` for an absent key — never an
    error. Use `has` to tell "absent" from "present with value `none`".
@@ -165,19 +178,26 @@ Read `DX-REPORT.md` for the full account; the load-bearing AQL traps are:
 
 - **Never `merge` to update a node** — `merge` is a *deep, index-wise* merge and
   fuses sibling lists. Rebuild nodes with the explicit `mk-*` constructor.
-- **Box stored values** — `do {k: [v]}` *evaluates* map values, so a string
-  value like `"if"`/`"do"` would be dispatched as a word. Values are wrapped in
-  a one-element list and unwrapped on read.
 - **Signature order = reverse of call order** (first parameter = top of stack),
   and a namespace word whose top-of-stack type doesn't match **fails silently**
   (returns the function as data). Write the intended call form in a comment.
-- **Reserved binding names:** `end`, `node`, `eq`, and single capital letters
-  (type names) cannot be `def`/param/`var` names.
+- **Reserved binding names** cannot be `def`/param/`var` names: `end`, `node`,
+  `eq`, `base`, single capital letters (type names), and other core words —
+  the interpreter rejects redefining a core word.
 - **Index lists as `xs get (i)`**, not `xs get i` (a bare variable index returns
   `none`).
-- **Build path strings with `concat`**, not string interpolation, inside
-  recursive-call arguments.
+- **Build path strings with core `add`** (`pfx ch add`); `concat`/`indexof`/
+  `contains` now live in `aql:string-util` (`StringUtil.*`).
 - **`fold` binds `[element accumulator]`** (element first, accumulator on top).
+- **Receiverless Reach lenses** (`$.field`, `$.0`) are inert `Reach` values that
+  `each`/`filter`/`sortby` apply per element — `(t map-entries) each $.1` plucks
+  the value column. They only express a *plain* field/index read, so they can't
+  replace the child-list folds, which couple a key-equality test against a
+  runtime char with a recursive descent. `filter` also needs a real `Function`
+  or `Reach`, not a `[ var [...] ]` block, so the keep-folds stay as folds.
+- Values can be stored **directly** in a `do {…}` node — earlier aql evaluated
+  map values as code (so a String naming a word was dispatched, which forced a
+  "boxing" workaround), but `db828ec` fixed it.
 
 To add a variant: mirror an existing module's structure, export a `…Set` and a
 `…Map`, add `test/<variant>_test.aql` plus `test/<variant>_prop_spec.aql` (keep

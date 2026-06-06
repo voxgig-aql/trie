@@ -26,31 +26,23 @@
 # most one edge. Paths are reassembled by concatenating labels.
 #
 # Like the standard trie, radix trees here are PERSISTENT: mutators return a
-# new tree and rebuild nodes along the edited path. We build paths with
-# `concat` rather than string interpolation, and rebuild nodes with an
-# explicit literal constructor — never `merge`, which deep-merges and would
-# fuse sibling edge lists.
+# new tree and rebuild nodes along the edited path. Paths are assembled with
+# core `add`, and nodes rebuilt with an explicit literal constructor — never
+# `merge`, which deep-merges and would fuse sibling edge lists.
 #
-# Imported via `"./radix.aql" import end`.
+# Imported via `import "./radix.aql"`.
 
 
 # --- node construction ----------------------------------------------
 
-# Values are stored *boxed* (wrapped in a one-element list) so the `do {…}`
-# constructor never evaluates a bare String value that happens to name a
-# word (e.g. "do", "if", "get"). `box` wraps; `unbox` unwraps an empty box
-# to `none`.
-def box fn [ [val:Any] [List] [ [] val push ] ]
+def empty-node fn [ [] [Map] [ {end: false, val: none, kids: []} ] ]
 
-def unbox fn [ [b:Any] [Any] [ if ((b size) eq 0) [none] [b get 0] ] ]
-
-def empty-node fn [ [] [Map] [ {end: false, val: [], kids: []} ] ]
-
-# Build a node from its fields; `vbox` is an already-boxed value. `fin` (not
-# `end`) because `end` is the AQL call terminator and cannot be a binding
-# name. Call: `kids vbox fin mk-node`.
+# Build a node from its fields. `fin` (not `end`) because `end` is the AQL call
+# terminator and cannot be a binding name. Values are stored directly (aql
+# `db828ec` no longer evaluates `do {…}` map values, so the old box is gone).
+# Call: `kids val fin mk-node`.
 def mk-node fn [
-  [fin:Any vbox:Any kids:Any] [Map] [ do {end: [fin], val: [vbox], kids: [kids]} ]
+  [fin:Any val:Any kids:Any] [Map] [ do {end: [fin], val: [val], kids: [kids]} ]
 ]
 
 # A node with no value and no edges is dead and gets pruned after a delete.
@@ -129,11 +121,11 @@ def drop-edge fn [
 # Insert/replace `key` → `val` beneath `node`. Call: `node key val radix-insert`.
 def radix-insert fn [
   [val:Any key:String node:Map] [Map] [
-    if ((key size) eq 0) [ (node "kids" get) (val box) true mk-node ] [
+    if ((key size) eq 0) [ (node "kids" get) val true mk-node ] [
       def edge (node key find-edge)
       if (edge eq none) [
         # nothing shares a first character: add the whole key as one edge
-        def term ([] (val box) true mk-node)
+        def term ([] val true mk-node)
         node key term add-edge
       ] [
         def lab (edge get 0)
@@ -149,10 +141,10 @@ def radix-insert fn [
           def pre   (key slice 0 p)
           def lrest (lab slice p (lab size))
           def krest (key slice p (key size))
-          def mid0  ([[lrest c]] [] false mk-node)
+          def mid0  ([[lrest c]] none false mk-node)
           def mid (if ((krest size) eq 0)
-            [ (mid0 "kids" get) (val box) true mk-node ]
-            [ def kterm ([] (val box) true mk-node) mid0 krest kterm add-edge ])
+            [ (mid0 "kids" get) val true mk-node ]
+            [ def kterm ([] val true mk-node) mid0 krest kterm add-edge ])
           node lab pre mid set-edge
         ]
       ]
@@ -183,7 +175,7 @@ def radix-at fn [
 def radix-get fn [
   [key:String node:Map] [Any] [
     def n (node key radix-at)
-    if (n eq none) [none] [ if (n "end" get) [(n "val" get) unbox] [none] ]
+    if (n eq none) [none] [ if (n "end" get) [n "val" get] [none] ]
   ]
 ]
 
@@ -197,7 +189,7 @@ def collect-r fn [
     def acc2 (if (node "end" get) [acc pfx push] [acc])
     acc2 (node "kids" get) [
       var [[pair a]
-        def np ([pfx (pair get 0)] concat)
+        def np (pfx (pair get 0) add)
         (a np (pair get 1) collect-r)
       ]
     ] fold
@@ -216,12 +208,12 @@ def collect-prefix fn [
         def p (lab prefix common-len)
         if (p (prefix size) eq) [
           # prefix runs out within this edge: everything under it qualifies
-          def np ([apath lab] concat)
+          def np (apath lab add)
           (acc np c collect-r)
         ] [
           if (p (lab size) eq) [
             # whole label consumed: continue with the remaining prefix
-            def np ([apath lab] concat)
+            def np (apath lab add)
             def rp (prefix slice p (prefix size))
             (acc np rp c collect-prefix)
           ] [acc]
@@ -244,7 +236,7 @@ def longest-r fn [
         def c (edge get 1)
         def p (lab key common-len)
         if (p (lab size) eq) [
-          def np ([apath lab] concat)
+          def np (apath lab add)
           def rk (key slice p (key size))
           (best2 np rk c longest-r)
         ] [best2]
@@ -283,7 +275,7 @@ def node-height fn [
 # is left non-terminal with a single child. Call: `node key radix-delete`.
 def radix-delete fn [
   [key:String node:Map] [Map] [
-    if ((key size) eq 0) [ (node "kids" get) [] false mk-node ] [
+    if ((key size) eq 0) [ (node "kids" get) none false mk-node ] [
       def edge (node key find-edge)
       if (edge eq none) [node] [
         def lab (edge get 0)
@@ -295,7 +287,7 @@ def radix-delete fn [
             def gk (newc "kids" get)
             if (((newc "end" get) not) and ((gk size) eq 1)) [
               def gpair  (gk get 0)
-              def mlabel ([lab (gpair get 0)] concat)
+              def mlabel (lab (gpair get 0) add)
               def gchild (gpair get 1)
               (node lab mlabel gchild set-edge)
             ] [ node lab lab newc set-edge ]

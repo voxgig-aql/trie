@@ -17,19 +17,19 @@ We will start with the standard trie used as a **set** of words. Create a
 file `words.aql` next to `trie.aql`:
 
 ```aql
-"./trie.aql" import end
+import "./trie.aql"
 
 # AQL prints a program's first line last; one blank line up front keeps
 # the rest of the output in source order.
 "" print
 
-def t0 (TrieSet.make end)
-def t1 (t0 "cat"  TrieSet.add end)
-def t2 (t1 "car"  TrieSet.add end)
-def t3 (t2 "card" TrieSet.add end)
-def t4 (t3 "dog"  TrieSet.add end)
+def t0 (TrieSet.make)
+def t1 (t0 "cat"  TrieSet.add)
+def t2 (t1 "car"  TrieSet.add)
+def t3 (t2 "card" TrieSet.add)
+def t4 (t3 "dog"  TrieSet.add)
 
-`words: ${(t4 TrieSet.keys end)}` print
+`words: ${(t4 TrieSet.keys)}` print
 ```
 
 Run it:
@@ -51,9 +51,9 @@ trie stores keys in order.
 `TrieSet.has` answers membership exactly — no false positives:
 
 ```aql
-`cat?  ${(t4 "cat" TrieSet.has end)}` print
-`ca?   ${(t4 "ca"  TrieSet.has end)}` print
-`emu?  ${(t4 "emu" TrieSet.has end)}` print
+`cat?  ${(t4 "cat" TrieSet.has)}` print
+`ca?   ${(t4 "ca"  TrieSet.has)}` print
+`emu?  ${(t4 "emu" TrieSet.has)}` print
 ```
 
 ```console
@@ -74,9 +74,9 @@ This is the move tries are made for. `with-prefix` returns every key that
 starts with what the user has typed so far:
 
 ```aql
-`complete "ca": ${(t4 "ca"  TrieSet.with-prefix end)}` print
-`complete "d":  ${(t4 "d"   TrieSet.with-prefix end)}` print
-`complete "z":  ${(t4 "z"   TrieSet.with-prefix end)}` print
+`complete "ca": ${(t4 "ca"  TrieSet.with-prefix)}` print
+`complete "d":  ${(t4 "d"   TrieSet.with-prefix)}` print
+`complete "z":  ${(t4 "z"   TrieSet.with-prefix)}` print
 ```
 
 ```console
@@ -97,9 +97,9 @@ Sometimes you have a long string and want the longest stored key that
 `"car"` is already there; ask what prefixes `"cartoon"`:
 
 ```aql
-`longest of "cartoon": ${(t4 "cartoon" TrieSet.longest-prefix end)}` print
-`longest of "cat":     ${(t4 "cat"     TrieSet.longest-prefix end)}` print
-`longest of "emu":     ${(t4 "emu"     TrieSet.longest-prefix end)}` print
+`longest of "cartoon": ${(t4 "cartoon" TrieSet.longest-prefix)}` print
+`longest of "cat":     ${(t4 "cat"     TrieSet.longest-prefix)}` print
+`longest of "emu":     ${(t4 "emu"     TrieSet.longest-prefix)}` print
 ```
 
 ```console
@@ -121,17 +121,17 @@ changes: use `TrieMap`, and `set` takes a value. Let us map each word to
 its length. Create `lengths.aql`:
 
 ```aql
-"./trie.aql" import end
+import "./trie.aql"
 "" print
 
-def m0 (TrieMap.make end)
-def m1 (m0 "cat"  3 TrieMap.set end)
-def m2 (m1 "card" 4 TrieMap.set end)
+def m0 (TrieMap.make)
+def m1 (m0 "cat"  3 TrieMap.set)
+def m2 (m1 "card" 4 TrieMap.set)
 
-`get cat:     ${(m2 "cat"  TrieMap.get end)}` print
-`get card:    ${(m2 "card" TrieMap.get end)}` print
-`get missing: ${(m2 "emu"  TrieMap.get end)}` print
-`entries:     ${(m2 TrieMap.entries end)}` print
+`get cat:     ${(m2 "cat"  TrieMap.get)}` print
+`get card:    ${(m2 "card" TrieMap.get)}` print
+`get missing: ${(m2 "emu"  TrieMap.get)}` print
+`entries:     ${(m2 TrieMap.entries)}` print
 ```
 
 ```console
@@ -155,10 +155,10 @@ the set script and swap the import and the namespace prefix for the radix
 tree:
 
 ```aql
-"./radix.aql" import end       # was ./trie.aql
+import "./radix.aql"       # was ./trie.aql
 "" print
-def t ((((( RadixSet.make end) "cat" RadixSet.add end) "car" RadixSet.add end) "card" RadixSet.add end) "dog" RadixSet.add end)
-`complete "ca": ${(t "ca" RadixSet.with-prefix end)}` print
+def t ((((( RadixSet.make) "cat" RadixSet.add) "car" RadixSet.add) "card" RadixSet.add) "dog" RadixSet.add)
+`complete "ca": ${(t "ca" RadixSet.with-prefix)}` print
 ```
 
 ```console

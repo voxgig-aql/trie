@@ -7,9 +7,9 @@
 #   aql test/burst_prop_spec.aql
 
 
-"aql:test"    import end
-"./burst.aql" import end
-"./trie.aql"  import end
+import "aql:test"
+import "./burst.aql"
+import "./trie.aql"
 
 
 def charset "abcdefghijklmnopqrstuvwxyz"
@@ -24,13 +24,13 @@ def starts-with fn [
 
 def burst-of fn [
   [keys:List] [Map] [
-    (BurstSet.make end) keys [ var [[k acc] acc k BurstSet.add end ] ] fold
+    (BurstSet.make) keys [ var [[k acc] acc k BurstSet.add end ] ] fold
   ]
 ]
 
 def trie-of fn [
   [keys:List] [Map] [
-    (TrieSet.make end) keys [ var [[k acc] acc k TrieSet.add end ] ] fold
+    (TrieSet.make) keys [ var [[k acc] acc k TrieSet.add end ] ] fold
   ]
 ]
 
@@ -62,82 +62,82 @@ def report fn [
 
 def specs [
 
-  (test.prop "add-then-has"
+  (Test.prop "add-then-has"
     [ r.string charset (r.int 1 12) ]
     [ var [[key]
-        def s ((BurstSet.make end) key BurstSet.add end)
-        (s key BurstSet.has end)
+        def s ((BurstSet.make) key BurstSet.add)
+        (s key BurstSet.has)
     ] ])
 
-  (test.prop "empty-has-nothing"
+  (Test.prop "empty-has-nothing"
     [ r.string charset (r.int 1 12) ]
-    [ var [[key] ((BurstSet.make end) key BurstSet.has end) not ] ])
+    [ var [[key] ((BurstSet.make) key BurstSet.has) not ] ])
 
-  (test.prop "set-then-get"
+  (Test.prop "set-then-get"
     [ do { k: [r.string charset (r.int 1 12)], v: [r.int 0 1000] } ]
     [ var [[in]
         def k (in "k" get)
         def v (in "v" get)
-        def t ((BurstMap.make end) k v BurstMap.set end)
-        (t k BurstMap.get end) v eq
+        def t ((BurstMap.make) k v BurstMap.set)
+        (t k BurstMap.get) v eq
     ] ])
 
   # Larger batches so buckets burst (burst-limit is 8).
-  (test.prop "bulk-all-present"
+  (Test.prop "bulk-all-present"
     [ r.list-of [ r.string charset (r.int 1 6) ] (r.int 5 30) ]
     [ var [[keys]
         def s (keys burst-of)
         (keys each [ var [[k] s k BurstSet.has end ] ]) all end
     ] ])
 
-  (test.prop "prefix-sound"
+  (Test.prop "prefix-sound"
     [ r.list-of [ r.string charset (r.int 1 6) ] (r.int 5 30) ]
     [ var [[keys]
         def s (keys burst-of)
         def p (keys get 0)
-        def hits (s p BurstSet.with-prefix end)
+        def hits (s p BurstSet.with-prefix)
         hits p all-have-prefix
     ] ])
 
-  (test.prop "delete-removes-one"
+  (Test.prop "delete-removes-one"
     [ r.list-of [ r.string charset (r.int 1 6) ] (r.int 5 30) ]
     [ var [[keys]
         def s (keys burst-of)
         def k (keys get 0)
-        def before (s BurstSet.size end)
-        def s2 (s k BurstSet.delete end)
-        def gone ((s2 k BurstSet.has end) not)
-        def smaller ((s2 BurstSet.size end) (before 1 sub) eq)
+        def before (s BurstSet.size)
+        def s2 (s k BurstSet.delete)
+        def gone ((s2 k BurstSet.has) not)
+        def smaller ((s2 BurstSet.size) (before 1 sub) eq)
         gone smaller and
     ] ])
 
   # CROSS-CHECK against the standard trie over identical (bursting) batches.
-  (test.prop "burst-matches-trie"
+  (Test.prop "burst-matches-trie"
     [ r.list-of [ r.string charset (r.int 1 6) ] (r.int 5 40) ]
     [ var [[keys]
         def a (keys burst-of)
         def b (keys trie-of)
-        (a BurstSet.keys end) (b TrieSet.keys end) list-eq
+        (a BurstSet.keys) (b TrieSet.keys) list-eq
     ] ])
 
-  (test.prop "longest-prefix-nested"
+  (Test.prop "longest-prefix-nested"
     [ r.string charset 10 ]
     [ var [[s]
         def k1 (s slice 0 2)
         def k2 (s slice 0 5)
-        def t (((BurstSet.make end) k1 BurstSet.add end) k2 BurstSet.add end)
-        (t s BurstSet.longest-prefix end) k2 eq
+        def t (((BurstSet.make) k1 BurstSet.add) k2 BurstSet.add)
+        (t s BurstSet.longest-prefix) k2 eq
     ] ])
 
 ]
 
 
-def _ (specs each [ var [[s] (s test.run-property end) report 0 ] ])
+def _ (specs each [ var [[s] (s Test.run-property) report 0 ] ])
 
 
 # --- summary -------------------------------------------------------
 
 "---" print
-"fail count: " print test.fail-count end print
-0 test.fail-count end assert.equal end
+"fail count: " print Test.fail-count end print
+0 Test.fail-count end Assert.equal end
 "all green" print

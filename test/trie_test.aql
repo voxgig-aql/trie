@@ -4,19 +4,18 @@
 #   aql test/trie_test.aql
 
 
-"aql:test"   import end
-"aql:report" import end
-"./trie.aql" import end
+import "aql:test"
+import "./trie.aql"
 
 
 # Build a small fixture map: cat=1 car=2 card=3 dog=4.
 def fixture fn [
   [] [Map] [
-    ((((( TrieMap.make end)
-      "cat"  1 TrieMap.set end)
-      "car"  2 TrieMap.set end)
-      "card" 3 TrieMap.set end)
-      "dog"  4 TrieMap.set end)
+    ((((( TrieMap.make)
+      "cat"  1 TrieMap.set)
+      "car"  2 TrieMap.set)
+      "card" 3 TrieMap.set)
+      "dog"  4 TrieMap.set)
   ]
 ]
 
@@ -24,193 +23,193 @@ def fixture fn [
 # --- TrieMap: empty trie ---------------------------------------------
 
 [
-  def t (TrieMap.make end)
-  0     (t TrieMap.size end)            assert.equal end
-  false (t "anything" TrieMap.has end)  assert.equal end
-  none  (t "anything" TrieMap.get end)  assert.equal end
-  []    (t TrieMap.keys end)            assert.equal end
-] "map-empty" test.test end
+  def t (TrieMap.make)
+  0     (t TrieMap.size)            Assert.equal end
+  false (t "anything" TrieMap.has)  Assert.equal end
+  none  (t "anything" TrieMap.get)  Assert.equal end
+  []    (t TrieMap.keys)            Assert.equal end
+] "map-empty" Test.test end
 
 
 # --- TrieMap: set then get/has --------------------------------------
 
 [
   def t (fixture)
-  1     (t "cat"  TrieMap.get end) assert.equal end
-  2     (t "car"  TrieMap.get end) assert.equal end
-  3     (t "card" TrieMap.get end) assert.equal end
-  4     (t "dog"  TrieMap.get end) assert.equal end
-  true  (t "cat"  TrieMap.has end) assert.equal end
+  1     (t "cat"  TrieMap.get) Assert.equal end
+  2     (t "car"  TrieMap.get) Assert.equal end
+  3     (t "card" TrieMap.get) Assert.equal end
+  4     (t "dog"  TrieMap.get) Assert.equal end
+  true  (t "cat"  TrieMap.has) Assert.equal end
   # a pure prefix is not itself a key
-  false (t "ca"   TrieMap.has end) assert.equal end
-  none  (t "ca"   TrieMap.get end) assert.equal end
-] "map-set-get" test.test end
+  false (t "ca"   TrieMap.has) Assert.equal end
+  none  (t "ca"   TrieMap.get) Assert.equal end
+] "map-set-get" Test.test end
 
 
 # --- TrieMap: set overwrites the value ------------------------------
 
 [
   def t  (fixture)
-  def t2 (t "cat" 99 TrieMap.set end)
-  99 (t2 "cat" TrieMap.get end) assert.equal end
+  def t2 (t "cat" 99 TrieMap.set)
+  99 (t2 "cat" TrieMap.get) Assert.equal end
   # other keys untouched
-  2  (t2 "car" TrieMap.get end) assert.equal end
+  2  (t2 "car" TrieMap.get) Assert.equal end
   # original is unchanged (persistence)
-  1  (t "cat"  TrieMap.get end) assert.equal end
-] "map-overwrite" test.test end
+  1  (t "cat"  TrieMap.get) Assert.equal end
+] "map-overwrite" Test.test end
 
 
 # --- TrieMap: size, height, keys, values, entries -------------------
 
 [
   def t (fixture)
-  4 (t TrieMap.size   end) assert.equal end
-  4 (t TrieMap.height end) assert.equal end
-  ["car" "card" "cat" "dog"] (t TrieMap.keys end) assert.equal end
-] "map-stats" test.test end
+  4 (t TrieMap.size) Assert.equal end
+  4 (t TrieMap.height) Assert.equal end
+  ["car" "card" "cat" "dog"] (t TrieMap.keys) Assert.equal end
+] "map-stats" Test.test end
 
 
 # --- TrieMap: prefix queries ----------------------------------------
 
 [
   def t (fixture)
-  ["car" "card" "cat"] (t "ca" TrieMap.keys-with-prefix end) assert.equal end
-  ["card"]             (t "card" TrieMap.keys-with-prefix end) assert.equal end
+  ["car" "card" "cat"] (t "ca" TrieMap.keys-with-prefix) Assert.equal end
+  ["card"]             (t "card" TrieMap.keys-with-prefix) Assert.equal end
   # a prefix that is present in no key yields nothing
-  []                   (t "z" TrieMap.keys-with-prefix end) assert.equal end
+  []                   (t "z" TrieMap.keys-with-prefix) Assert.equal end
   # whole-trie prefix
-  ["car" "card" "cat" "dog"] (t "" TrieMap.keys-with-prefix end) assert.equal end
-] "map-prefix" test.test end
+  ["car" "card" "cat" "dog"] (t "" TrieMap.keys-with-prefix) Assert.equal end
+] "map-prefix" Test.test end
 
 
 # --- TrieMap: longest-prefix ----------------------------------------
 
 [
   def t (fixture)
-  "card" (t "cardiff"  TrieMap.longest-prefix end) assert.equal end
-  "car"  (t "carrot"   TrieMap.longest-prefix end) assert.equal end
-  "cat"  (t "cat"      TrieMap.longest-prefix end) assert.equal end
-  none   (t "zebra"    TrieMap.longest-prefix end) assert.equal end
-] "map-longest-prefix" test.test end
+  "card" (t "cardiff"  TrieMap.longest-prefix) Assert.equal end
+  "car"  (t "carrot"   TrieMap.longest-prefix) Assert.equal end
+  "cat"  (t "cat"      TrieMap.longest-prefix) Assert.equal end
+  none   (t "zebra"    TrieMap.longest-prefix) Assert.equal end
+] "map-longest-prefix" Test.test end
 
 
 # --- TrieMap: delete prunes only the target -------------------------
 
 [
   def t  (fixture)
-  def t2 (t "car" TrieMap.delete end)
-  false (t2 "car"  TrieMap.has end) assert.equal end
+  def t2 (t "car" TrieMap.delete)
+  false (t2 "car"  TrieMap.has) Assert.equal end
   # "card" sits below "car" and must survive
-  true  (t2 "card" TrieMap.has end) assert.equal end
-  true  (t2 "cat"  TrieMap.has end) assert.equal end
-  3     (t2 TrieMap.size end) assert.equal end
+  true  (t2 "card" TrieMap.has) Assert.equal end
+  true  (t2 "cat"  TrieMap.has) Assert.equal end
+  3     (t2 TrieMap.size) Assert.equal end
   # deleting an absent key is a no-op
-  def t3 (t2 "nope" TrieMap.delete end)
-  3     (t3 TrieMap.size end) assert.equal end
-] "map-delete" test.test end
+  def t3 (t2 "nope" TrieMap.delete)
+  3     (t3 TrieMap.size) Assert.equal end
+] "map-delete" Test.test end
 
 
 # --- TrieMap: entries and values are key-sorted ---------------------
 
 [
-  def t (((TrieMap.make end) "b" 2 TrieMap.set end) "a" 1 TrieMap.set end)
-  [["a" 1] ["b" 2]] (t TrieMap.entries end) assert.equal end
-  [1 2]             (t TrieMap.values  end) assert.equal end
-] "map-entries" test.test end
+  def t (((TrieMap.make) "b" 2 TrieMap.set) "a" 1 TrieMap.set)
+  [["a" 1] ["b" 2]] (t TrieMap.entries) Assert.equal end
+  [1 2]             (t TrieMap.values) Assert.equal end
+] "map-entries" Test.test end
 
 
 # --- TrieSet: add / has / membership --------------------------------
 
 [
-  def s ((((TrieSet.make end)
-    "app"    TrieSet.add end)
-    "apple"  TrieSet.add end)
-    "banana" TrieSet.add end)
-  true  (s "app"    TrieSet.has end) assert.equal end
-  true  (s "apple"  TrieSet.has end) assert.equal end
-  false (s "appl"   TrieSet.has end) assert.equal end
-  false (s "orange" TrieSet.has end) assert.equal end
-  3     (s TrieSet.size end) assert.equal end
-  ["app" "apple" "banana"] (s TrieSet.keys end) assert.equal end
-] "set-add-has" test.test end
+  def s ((((TrieSet.make)
+    "app"    TrieSet.add)
+    "apple"  TrieSet.add)
+    "banana" TrieSet.add)
+  true  (s "app"    TrieSet.has) Assert.equal end
+  true  (s "apple"  TrieSet.has) Assert.equal end
+  false (s "appl"   TrieSet.has) Assert.equal end
+  false (s "orange" TrieSet.has) Assert.equal end
+  3     (s TrieSet.size) Assert.equal end
+  ["app" "apple" "banana"] (s TrieSet.keys) Assert.equal end
+] "set-add-has" Test.test end
 
 
 # --- TrieSet: prefix + longest --------------------------------------
 
 [
-  def s (((TrieSet.make end)
-    "app"   TrieSet.add end)
-    "apple" TrieSet.add end)
-  ["app" "apple"] (s "app" TrieSet.with-prefix end) assert.equal end
-  "apple" (s "applesauce" TrieSet.longest-prefix end) assert.equal end
-  "app"   (s "appliance"  TrieSet.longest-prefix end) assert.equal end
-] "set-prefix" test.test end
+  def s (((TrieSet.make)
+    "app"   TrieSet.add)
+    "apple" TrieSet.add)
+  ["app" "apple"] (s "app" TrieSet.with-prefix) Assert.equal end
+  "apple" (s "applesauce" TrieSet.longest-prefix) Assert.equal end
+  "app"   (s "appliance"  TrieSet.longest-prefix) Assert.equal end
+] "set-prefix" Test.test end
 
 
 # --- TrieSet: delete -------------------------------------------------
 
 [
-  def s ((((TrieSet.make end)
-    "app"   TrieSet.add end)
-    "apple" TrieSet.add end)
-    "apply" TrieSet.add end)
-  def s2 (s "app" TrieSet.delete end)
-  false (s2 "app"   TrieSet.has end) assert.equal end
-  true  (s2 "apple" TrieSet.has end) assert.equal end
-  true  (s2 "apply" TrieSet.has end) assert.equal end
-] "set-delete" test.test end
+  def s ((((TrieSet.make)
+    "app"   TrieSet.add)
+    "apple" TrieSet.add)
+    "apply" TrieSet.add)
+  def s2 (s "app" TrieSet.delete)
+  false (s2 "app"   TrieSet.has) Assert.equal end
+  true  (s2 "apple" TrieSet.has) Assert.equal end
+  true  (s2 "apply" TrieSet.has) Assert.equal end
+] "set-delete" Test.test end
 
 
 # --- fuzzy (edit distance) search -----------------------------------
 
 [
-  def t ((((((( TrieSet.make end)
-    "cat" TrieSet.add end) "car" TrieSet.add end) "card" TrieSet.add end)
-    "cab" TrieSet.add end) "dog" TrieSet.add end) "cart" TrieSet.add end)
+  def t ((((((( TrieSet.make)
+    "cat" TrieSet.add) "car" TrieSet.add) "card" TrieSet.add)
+    "cab" TrieSet.add) "dog" TrieSet.add) "cart" TrieSet.add)
   # within 1 of "cat": cat(0), car(1), cab(1), cart(1) — NOT card(2), NOT dog
-  ["cab" "car" "cart" "cat"] (t "cat" 1 TrieSet.within end) assert.equal end
+  ["cab" "car" "cart" "cat"] (t "cat" 1 TrieSet.within) Assert.equal end
   # within 0 is exact match only
-  ["car"] (t "car" 0 TrieSet.within end) assert.equal end
+  ["car"] (t "car" 0 TrieSet.within) Assert.equal end
   # nothing close to a far query
-  [] (t "zzzz" 1 TrieSet.within end) assert.equal end
+  [] (t "zzzz" 1 TrieSet.within) Assert.equal end
   # the empty key counts: distance from "" to a 1-char query is 1
-  def s ((TrieSet.make end) "" TrieSet.add end)
-  [""] (s "x" 1 TrieSet.within end) assert.equal end
-] "set-within" test.test end
+  def s ((TrieSet.make) "" TrieSet.add)
+  [""] (s "x" 1 TrieSet.within) Assert.equal end
+] "set-within" Test.test end
 
 
 # --- wildcard match -------------------------------------------------
 
 [
-  def t ((((( TrieSet.make end)
-    "cat" TrieSet.add end) "car" TrieSet.add end) "card" TrieSet.add end)
-    "dog" TrieSet.add end)
-  ["car" "cat"]        (t "ca?" TrieSet.match end) assert.equal end
-  ["car" "card" "cat"] (t "ca*" TrieSet.match end) assert.equal end
-  ["card"]             (t "c?rd" TrieSet.match end) assert.equal end
-  ["car" "card" "cat" "dog"] (t "*" TrieSet.match end) assert.equal end
-  ["card"]             (t "*d" TrieSet.match end) assert.equal end
-] "set-match" test.test end
+  def t ((((( TrieSet.make)
+    "cat" TrieSet.add) "car" TrieSet.add) "card" TrieSet.add)
+    "dog" TrieSet.add)
+  ["car" "cat"]        (t "ca?" TrieSet.match) Assert.equal end
+  ["car" "card" "cat"] (t "ca*" TrieSet.match) Assert.equal end
+  ["card"]             (t "c?rd" TrieSet.match) Assert.equal end
+  ["car" "card" "cat" "dog"] (t "*" TrieSet.match) Assert.equal end
+  ["card"]             (t "*d" TrieSet.match) Assert.equal end
+] "set-match" Test.test end
 
 
 # --- construction from data (round-trips keys / entries) ------------
 
 [
-  def t ((((TrieSet.make end) "b" TrieSet.add end) "a" TrieSet.add end) "ab" TrieSet.add end)
-  def t2 ((t TrieSet.keys end) TrieSet.from-keys end)
-  (t TrieSet.keys end) (t2 TrieSet.keys end) assert.equal end
-  3 (t2 TrieSet.size end) assert.equal end
+  def t ((((TrieSet.make) "b" TrieSet.add) "a" TrieSet.add) "ab" TrieSet.add)
+  def t2 ((t TrieSet.keys) TrieSet.from-keys)
+  (t TrieSet.keys) (t2 TrieSet.keys) Assert.equal end
+  3 (t2 TrieSet.size) Assert.equal end
 
-  def m (((TrieMap.make end) "x" 1 TrieMap.set end) "y" 2 TrieMap.set end)
-  def m2 ((m TrieMap.entries end) TrieMap.from-entries end)
-  (m TrieMap.entries end) (m2 TrieMap.entries end) assert.equal end
-  1 (m2 "x" TrieMap.get end) assert.equal end
-] "from-data" test.test end
+  def m (((TrieMap.make) "x" 1 TrieMap.set) "y" 2 TrieMap.set)
+  def m2 ((m TrieMap.entries) TrieMap.from-entries)
+  (m TrieMap.entries) (m2 TrieMap.entries) Assert.equal end
+  1 (m2 "x" TrieMap.get) Assert.equal end
+] "from-data" Test.test end
 
 
 # --- summary -------------------------------------------------------
 
 "---" print
-"fail count: " print test.fail-count end print
-0 test.fail-count end assert.equal end
+"fail count: " print Test.fail-count end print
+0 Test.fail-count end Assert.equal end
 "all green" print

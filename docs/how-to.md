@@ -38,7 +38,7 @@ aql -version
 aql test/smoke.aql
 ```
 
-This library is verified against aql commit `b6617dd`; the CI workflow
+This library is verified against aql commit `db828ec`; the CI workflow
 (`ci/test.yml`) pins the same commit.
 
 ---
@@ -66,10 +66,10 @@ Fold the keys into a fresh trie. Each `add` returns the next trie, so the
 accumulator threads through:
 
 ```aql
-"./trie.aql" import end
+import "./trie.aql"
 
 def words ["apple" "app" "apply" "banana"]
-def t ((TrieSet.make end) words [ var [[w acc] acc w TrieSet.add end ] ] fold)
+def t ((TrieSet.make) words [ var [[w acc] acc w TrieSet.add end ] ] fold)
 ```
 
 `fold` runs as `init list [body] fold` — here the empty trie is the
@@ -85,9 +85,9 @@ accumulator `acc`, returning the next trie. For a map, carry a value too:
 prefix, sorted — exactly an autocomplete list:
 
 ```aql
-def t (((( TrieSet.make end) "app" TrieSet.add end) "apple" TrieSet.add end) "apply" TrieSet.add end)
-(t "app" TrieSet.with-prefix end) print     # => ["app", "apple", "apply"]
-(t "z"   TrieSet.with-prefix end) print     # => []
+def t (((( TrieSet.make) "app" TrieSet.add) "apple" TrieSet.add) "apply" TrieSet.add)
+(t "app" TrieSet.with-prefix) print     # => ["app", "apple", "apply"]
+(t "z"   TrieSet.with-prefix) print     # => []
 ```
 
 An empty prefix returns all keys. To autocomplete *and* show values, use
@@ -101,9 +101,9 @@ Find the longest stored key that is a prefix of a query — e.g. dictionary
 tokenization or routing:
 
 ```aql
-def t ((( TrieSet.make end) "car" TrieSet.add end) "card" TrieSet.add end)
-(t "cartoon" TrieSet.longest-prefix end) print   # => "car"
-(t "zebra"   TrieSet.longest-prefix end) print   # => None
+def t ((( TrieSet.make) "car" TrieSet.add) "card" TrieSet.add)
+(t "cartoon" TrieSet.longest-prefix) print   # => "car"
+(t "zebra"   TrieSet.longest-prefix) print   # => None
 ```
 
 `none` means no stored key prefixes the query.
@@ -115,13 +115,13 @@ def t ((( TrieSet.make end) "car" TrieSet.add end) "card" TrieSet.add end)
 Swap `…Set` for `…Map`, and bind values with `set`:
 
 ```aql
-"./trie.aql" import end
+import "./trie.aql"
 
-def m (((TrieMap.make end) "GET" 1 TrieMap.set end) "POST" 2 TrieMap.set end)
+def m (((TrieMap.make) "GET" 1 TrieMap.set) "POST" 2 TrieMap.set)
 
-(m "GET"    TrieMap.get end) print     # => 1
-(m "DELETE" TrieMap.get end) print     # => None  (absent)
-(m TrieMap.entries end)      print     # => [["GET" 1] ["POST" 2]]
+(m "GET"    TrieMap.get) print     # => 1
+(m "DELETE" TrieMap.get) print     # => None  (absent)
+(m TrieMap.entries)      print     # => [["GET" 1] ["POST" 2]]
 ```
 
 Values may be any type, including Strings that happen to be AQL words
@@ -136,11 +136,11 @@ whose stored value is `none`.
 below it:
 
 ```aql
-def t ((( TrieSet.make end) "car" TrieSet.add end) "card" TrieSet.add end)
-def t2 (t "car" TrieSet.delete end)
-(t2 "car"  TrieSet.has end) print     # => false
-(t2 "card" TrieSet.has end) print     # => true   (survives)
-(t  "car"  TrieSet.has end) print     # => true   (original unchanged)
+def t ((( TrieSet.make) "car" TrieSet.add) "card" TrieSet.add)
+def t2 (t "car" TrieSet.delete)
+(t2 "car"  TrieSet.has) print     # => false
+(t2 "card" TrieSet.has) print     # => true   (survives)
+(t  "car"  TrieSet.has) print     # => true   (original unchanged)
 ```
 
 Deleting an absent key is a no-op.
@@ -153,10 +153,10 @@ The API is identical across variants, so switching is mechanical: change
 the import and the namespace prefix. From standard to ternary search tree:
 
 ```diff
-- "./trie.aql" import end
-- def t ((TrieSet.make end) "cat" TrieSet.add end)
-+ "./tst.aql" import end
-+ def t ((TstSet.make end) "cat" TstSet.add end)
+- import "./trie.aql"
+- def t ((TrieSet.make) "cat" TrieSet.add)
++ import "./tst.aql"
++ def t ((TstSet.make) "cat" TstSet.add)
 ```
 
 Every word (`add`, `has`, `with-prefix`, `longest-prefix`, `keys`, …)
@@ -171,8 +171,8 @@ against the standard trie, so the swap is safe.
 sorted keys (sets) or entries (maps) — for logging or inspection:
 
 ```aql
-def t (((TrieMap.make end) "a" 1 TrieMap.set end) "b" 2 TrieMap.set end)
-(t TrieMap.encode end) print
+def t (((TrieMap.make) "a" 1 TrieMap.set) "b" 2 TrieMap.set)
+(t TrieMap.encode) print
 # => {entries:[['a' 1] ['b' 2]] kind:'triemap' size:2}
 ```
 
@@ -180,8 +180,8 @@ There is no string `decode` (AQL exposes no jsonic-string parser). For a
 programmatic round-trip, extract the data and rebuild it:
 
 ```aql
-def keys (t TrieSet.keys end)        # serialize these however you like
-def t2   (keys TrieSet.from-keys end)  # …and rebuild later
+def keys (t TrieSet.keys)        # serialize these however you like
+def t2   (keys TrieSet.from-keys)  # …and rebuild later
 ```
 
 For a map use `entries` with `Map.from-entries`. `from-keys`/`from-entries`
@@ -193,16 +193,16 @@ The standard trie adds two advanced queries. **Fuzzy** search returns every
 key within a Levenshtein edit distance:
 
 ```aql
-def t (((TrieSet.make end) "cat" TrieSet.add end) "car" TrieSet.add end)
-(t "cat" 1 TrieSet.within end) print   # => ["car", "cat"]
+def t (((TrieSet.make) "cat" TrieSet.add) "car" TrieSet.add)
+(t "cat" 1 TrieSet.within) print   # => ["car", "cat"]
 ```
 
 **Wildcard** search matches a pattern where `?` is any single character and
 `*` is any run of characters:
 
 ```aql
-(t "ca?" TrieSet.match end) print      # => ["car", "cat"]
-(t "*t"  TrieSet.match end) print       # => ["cat"]
+(t "ca?" TrieSet.match) print      # => ["car", "cat"]
+(t "*t"  TrieSet.match) print       # => ["cat"]
 ```
 
 Both work on `TrieMap` too (returning keys). To run them over data held in
@@ -217,14 +217,15 @@ Import the variant by relative path; you do **not** need to import
 anything else — each module pulls in its own dependencies:
 
 ```aql
-"./radix.aql" import end
-def t (RadixSet.make end)
+import "./radix.aql"
+def t (RadixSet.make)
 # … use the RadixSet namespace …
 ```
 
-Every call must end with `end` (or be wrapped in parens) so the word
-doesn't swallow the following token. `test/smoke.aql` is a complete worked
-example you can copy from.
+Forward arguments have precedence and a call resolves at the next function
+word or paren, so you rarely need a terminator; add `end`, parens, or the
+`/s` modifier only to stop a bare following literal from being grabbed.
+`test/smoke.aql` is a complete worked example you can copy from.
 
 ---
 
