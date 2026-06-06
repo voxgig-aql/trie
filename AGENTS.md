@@ -178,19 +178,20 @@ Read `DX-REPORT.md` for the full account; the load-bearing AQL traps are:
 
 - **Never `merge` to update a node** — `merge` is a *deep, index-wise* merge and
   fuses sibling lists. Rebuild nodes with the explicit `mk-*` constructor.
-- **Box stored values** — `do {k: [v]}` *evaluates* map values, so a string
-  value like `"if"`/`"do"` would be dispatched as a word. Values are wrapped in
-  a one-element list and unwrapped on read.
 - **Signature order = reverse of call order** (first parameter = top of stack),
   and a namespace word whose top-of-stack type doesn't match **fails silently**
   (returns the function as data). Write the intended call form in a comment.
-- **Reserved binding names:** `end`, `node`, `eq`, and single capital letters
-  (type names) cannot be `def`/param/`var` names.
+- **Reserved binding names** cannot be `def`/param/`var` names: `end`, `node`,
+  `eq`, `base`, single capital letters (type names), and other core words —
+  the interpreter rejects redefining a core word.
 - **Index lists as `xs get (i)`**, not `xs get i` (a bare variable index returns
   `none`).
-- **Build path strings with `concat`**, not string interpolation, inside
-  recursive-call arguments.
+- **Build path strings with core `add`** (`pfx ch add`); `concat`/`indexof`/
+  `contains` now live in `aql:string-util` (`StringUtil.*`).
 - **`fold` binds `[element accumulator]`** (element first, accumulator on top).
+- Values can be stored **directly** in a `do {…}` node — earlier aql evaluated
+  map values as code (so a String naming a word was dispatched, which forced a
+  "boxing" workaround), but `db828ec` fixed it.
 
 To add a variant: mirror an existing module's structure, export a `…Set` and a
 `…Map`, add `test/<variant>_test.aql` plus `test/<variant>_prop_spec.aql` (keep

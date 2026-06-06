@@ -6,6 +6,15 @@ eight namespaces, ~2000 lines of AQL plus tests — against `aql` at commit
 workarounds I settled on, in the hope it is useful both to the next person
 writing AQL data structures and to the language authors.
 
+> **Postscript (upgraded to `db828ec`, 2026-06-06).** Some sharp edges below
+> were since fixed upstream, and the library was updated accordingly:
+> #4 (`do {…}` evaluating String values as code) is fixed, so the value
+> *boxing* workaround was removed; failing `Test.test` cases now surface
+> loudly by name (#5-adjacent DX). Others still stand. The upgrade also
+> brought breaking renames: `concat`/`indexof`/`contains` moved to
+> `aql:string-util`, the test module is now `Test.*`/`Assert.*`, and `base`
+> joined the reserved words — none a language *fault*, just churn to track.
+
 The headline: AQL is genuinely capable of expressing persistent, recursive
 data structures cleanly, and once the idioms are in hand the code reads
 well. Getting the idioms in hand, though, took a lot of empirical probing,
