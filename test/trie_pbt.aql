@@ -148,7 +148,7 @@ Test.check-prop "encode-has-size"
       def t (keys map-of)
       def enc (t TrieMap.encode)
       def n (t TrieMap.size)
-      `size:${n}` enc StringUtil.contains
+      enc `size:${n}` StringUtil.contains
     ]
   ]
   10 1 0

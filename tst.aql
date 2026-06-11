@@ -6,21 +6,21 @@
 #   TstSet — a set of Strings (membership), over the same engine.
 #
 # A ternary search tree (TST) is a hybrid of a binary search tree and a
-# trie. Each node holds a single character and three children:
+# trie. Each nd holds a single character and three children:
 #
-#   lo  — subtree for characters that sort *before*  this node's character
+#   lo  — subtree for characters that sort *before*  this nd's character
 #   mid — subtree for the *next* character, taken when this one matches
-#   hi  — subtree for characters that sort *after*   this node's character
+#   hi  — subtree for characters that sort *after*   this nd's character
 #
 # Following `mid` advances through the key; `lo`/`hi` are an ordinary BST
 # over the alternatives at one position. This needs far fewer pointers per
-# node than a trie's full child map, handles large or sparse alphabets
+# nd than a trie's full child map, handles large or sparse alphabets
 # gracefully, and yields keys in sorted order under an in-order walk — at
 # the cost of being a little deeper to descend.
 #
 # --- representation -------------------------------------------------
 #
-# A node is a Map { ch, end, val, lo, mid, hi }; an empty tree is `none`.
+# A nd is a Map { ch, end, val, lo, mid, hi }; an empty tree is `none`.
 # The middle child is named "mid" (not "eq") because `eq` is a builtin word and
 # would shadow the binding.
 #
@@ -30,9 +30,9 @@
 # Imported via `import "./tst.aql"`.
 
 
-# --- node construction ----------------------------------------------
+# --- nd construction ----------------------------------------------
 
-# Build a node. `fin` is the terminal flag (named `fin`, not `end`, which is
+# Build a nd. `fin` is the terminal flag (named `fin`, not `end`, which is
 # reserved). Values are stored directly (aql `db828ec` no longer evaluates
 # `do {…}` map values, so the old box is gone).
 # Call: `ch fin val lo mid hi mk-tnode`.
@@ -42,27 +42,27 @@ def mk-tnode fn [
   ]
 ]
 
-# Field-preserving rebuilds: each returns `node` with one field replaced.
-def with-lo  fn [ [lo:Any node:Map] [Map] [ (node "ch" get) (node "end" get) (node "val" get) lo (node "mid" get) (node "hi" get) mk-tnode ] ]
-def with-mid fn [ [mid:Any node:Map] [Map] [ (node "ch" get) (node "end" get) (node "val" get) (node "lo" get) mid (node "hi" get) mk-tnode ] ]
-def with-hi  fn [ [hi:Any node:Map] [Map] [ (node "ch" get) (node "end" get) (node "val" get) (node "lo" get) (node "mid" get) hi mk-tnode ] ]
+# Field-preserving rebuilds: each returns `nd` with one field replaced.
+def with-lo  fn [ [lo:Any nd:Map] [Map] [ (nd "ch" get) (nd "end" get) (nd "val" get) lo (nd "mid" get) (nd "hi" get) mk-tnode ] ]
+def with-mid fn [ [mid:Any nd:Map] [Map] [ (nd "ch" get) (nd "end" get) (nd "val" get) (nd "lo" get) mid (nd "hi" get) mk-tnode ] ]
+def with-hi  fn [ [hi:Any nd:Map] [Map] [ (nd "ch" get) (nd "end" get) (nd "val" get) (nd "lo" get) (nd "mid" get) hi mk-tnode ] ]
 
-# Replace the terminal flag and value. Call: `node val fin with-end-val`.
+# Replace the terminal flag and value. Call: `nd val fin with-end-val`.
 def with-end-val fn [
-  [fin:Any val:Any node:Map] [Map] [
-    (node "ch" get) fin val (node "lo" get) (node "mid" get) (node "hi" get) mk-tnode
+  [fin:Any val:Any nd:Map] [Map] [
+    (nd "ch" get) fin val (nd "lo" get) (nd "mid" get) (nd "hi" get) mk-tnode
   ]
 ]
 
 
 # --- core: insert ---------------------------------------------------
 
-# Insert/replace `key` → `val` into `node` (an Any: a Map or `none`).
-# Call: `node key val tst-insert`.
+# Insert/replace `key` → `val` into `nd` (an Any: a Map or `none`).
+# Call: `nd key val tst-insert`.
 def tst-insert fn [
-  [val:Any key:String node:Any] [Any] [
+  [val:Any key:String nd:Any] [Any] [
     def c (key slice 0 1)
-    def nd (if (node eq none) [ c false none none none none mk-tnode ] [node])
+    def nd (if (nd eq none) [ c false none none none none mk-tnode ] [nd])
     def ndc (nd "ch" get)
     if (c ndc lt) [
       def lo2 ((nd "lo" get) key val tst-insert) (nd lo2 with-lo)
@@ -82,35 +82,35 @@ def tst-insert fn [
 
 # --- core: locate ---------------------------------------------------
 
-# The value bound to `key`, or `none`. Call: `node key tst-get`.
+# The value bound to `key`, or `none`. Call: `nd key tst-get`.
 def tst-get fn [
-  [key:String node:Any] [Any] [
-    if (node eq none) [none] [
+  [key:String nd:Any] [Any] [
+    if (nd eq none) [none] [
       def c (key slice 0 1)
-      def ndc (node "ch" get)
-      if (c ndc lt) [ (node "lo" get) key tst-get ] [
-        if (c ndc gt) [ (node "hi" get) key tst-get ] [
+      def ndc (nd "ch" get)
+      if (c ndc lt) [ (nd "lo" get) key tst-get ] [
+        if (c ndc gt) [ (nd "hi" get) key tst-get ] [
           def rest (key slice 1 (key size))
           if ((rest size) eq 0)
-            [ if (node "end" get) [node "val" get] [none] ]
-            [ (node "mid" get) rest tst-get ]
+            [ if (nd "end" get) [nd "val" get] [none] ]
+            [ (nd "mid" get) rest tst-get ]
         ]
       ]
     ]
   ]
 ]
 
-# The node matching the last character of `key`, or `none`. Used to locate
-# the root of a prefix subtree. Call: `node key find-node`.
+# The nd matching the last character of `key`, or `none`. Used to locate
+# the root of a prefix subtree. Call: `nd key find-node`.
 def find-node fn [
-  [key:String node:Any] [Any] [
-    if (node eq none) [none] [
+  [key:String nd:Any] [Any] [
+    if (nd eq none) [none] [
       def c (key slice 0 1)
-      def ndc (node "ch" get)
-      if (c ndc lt) [ (node "lo" get) key find-node ] [
-        if (c ndc gt) [ (node "hi" get) key find-node ] [
+      def ndc (nd "ch" get)
+      if (c ndc lt) [ (nd "lo" get) key find-node ] [
+        if (c ndc gt) [ (nd "hi" get) key find-node ] [
           def rest (key slice 1 (key size))
-          if ((rest size) eq 0) [node] [ (node "mid" get) rest find-node ]
+          if ((rest size) eq 0) [nd] [ (nd "mid" get) rest find-node ]
         ]
       ]
     ]
@@ -120,60 +120,60 @@ def find-node fn [
 
 # --- traversal (in-order ⇒ sorted) ----------------------------------
 
-# Append every terminating key at or below `node` (prefixed by `prefix`) to
-# `acc`. Call: `acc prefix node collect-t`.
+# Append every terminating key at or below `nd` (prefixed by `prefix`) to
+# `acc`. Call: `acc prefix nd collect-t`.
 def collect-t fn [
-  [node:Any prefix:String acc:List] [List] [
-    if (node eq none) [acc] [
-      def a1 (acc prefix (node "lo" get) collect-t)
-      def pc (prefix (node "ch" get) add)
-      def a2 (if (node "end" get) [a1 pc push] [a1])
-      def a3 (a2 pc (node "mid" get) collect-t)
-      a3 prefix (node "hi" get) collect-t
+  [nd:Any prefix:String acc:List] [List] [
+    if (nd eq none) [acc] [
+      def a1 (acc prefix (nd "lo" get) collect-t)
+      def pc (prefix (nd "ch" get) add)
+      def a2 (if (nd "end" get) [a1 pc push] [a1])
+      def a3 (a2 pc (nd "mid" get) collect-t)
+      a3 prefix (nd "hi" get) collect-t
     ]
   ]
 ]
 
 # Longest stored key that is a prefix of `key`. `consumed` is the path so
-# far; `best` the best terminating prefix seen. Call: `best consumed key node longest-t`.
+# far; `best` the best terminating prefix seen. Call: `best consumed key nd longest-t`.
 def longest-t fn [
-  [node:Any key:String consumed:String best:Any] [Any] [
-    if (node eq none) [best] [
+  [nd:Any key:String consumed:String best:Any] [Any] [
+    if (nd eq none) [best] [
       def c (key slice 0 1)
-      def ndc (node "ch" get)
-      if (c ndc lt) [ best consumed key (node "lo" get) longest-t ] [
-        if (c ndc gt) [ best consumed key (node "hi" get) longest-t ] [
+      def ndc (nd "ch" get)
+      if (c ndc lt) [ best consumed key (nd "lo" get) longest-t ] [
+        if (c ndc gt) [ best consumed key (nd "hi" get) longest-t ] [
           def pc (consumed c add)
-          def best2 (if (node "end" get) [pc] [best])
+          def best2 (if (nd "end" get) [pc] [best])
           def rest (key slice 1 (key size))
-          if ((rest size) eq 0) [best2] [ best2 pc rest (node "mid" get) longest-t ]
+          if ((rest size) eq 0) [best2] [ best2 pc rest (nd "mid" get) longest-t ]
         ]
       ]
     ]
   ]
 ]
 
-# Number of keys at or below `node`. Call: `node count-t`.
+# Number of keys at or below `nd`. Call: `nd count-t`.
 def count-t fn [
-  [node:Any] [Integer] [
-    if (node eq none) [0] [
-      def here (if (node "end" get) [1] [0])
-      def l ((node "lo" get) count-t)
-      def m ((node "mid" get) count-t)
-      def h ((node "hi" get) count-t)
+  [nd:Any] [Integer] [
+    if (nd eq none) [0] [
+      def here (if (nd "end" get) [1] [0])
+      def l ((nd "lo" get) count-t)
+      def m ((nd "mid" get) count-t)
+      def h ((nd "hi" get) count-t)
       here l add m add h add
     ]
   ]
 ]
 
 # Structural depth of the ternary tree (counting all of lo/mid/hi).
-# Call: `node tst-height`.
+# Call: `nd tst-height`.
 def tst-height fn [
-  [node:Any] [Integer] [
-    if (node eq none) [0] [
-      def l ((node "lo" get) tst-height)
-      def m ((node "mid" get) tst-height)
-      def h ((node "hi" get) tst-height)
+  [nd:Any] [Integer] [
+    if (nd eq none) [0] [
+      def l ((nd "lo" get) tst-height)
+      def m ((nd "mid" get) tst-height)
+      def h ((nd "hi" get) tst-height)
       def mx1 (if (l gt m) [l] [m])
       def mx  (if (mx1 gt h) [mx1] [h])
       mx 1 add
@@ -184,33 +184,33 @@ def tst-height fn [
 
 # --- core: delete ---------------------------------------------------
 
-# Drop a node that has become completely empty (no key, no children).
+# Drop a nd that has become completely empty (no key, no children).
 def tprune fn [
-  [node:Any] [Any] [
-    if (node eq none) [none] [
-      def empty (((node "end" get) not)
-        and (((node "lo" get) eq none)
-          and (((node "mid" get) eq none) and ((node "hi" get) eq none))))
-      if empty [none] [node]
+  [nd:Any] [Any] [
+    if (nd eq none) [none] [
+      def empty (((nd "end" get) not)
+        and (((nd "lo" get) eq none)
+          and (((nd "mid" get) eq none) and ((nd "hi" get) eq none))))
+      if empty [none] [nd]
     ]
   ]
 ]
 
-# Remove `key` from `node`, pruning fully-empty nodes. Call: `node key tst-delete`.
+# Remove `key` from `nd`, pruning fully-empty nodes. Call: `nd key tst-delete`.
 def tst-delete fn [
-  [key:String node:Any] [Any] [
-    if (node eq none) [none] [
+  [key:String nd:Any] [Any] [
+    if (nd eq none) [none] [
       def c (key slice 0 1)
-      def ndc (node "ch" get)
+      def ndc (nd "ch" get)
       if (c ndc lt) [
-        def lo2 ((node "lo" get) key tst-delete) (node lo2 with-lo) tprune
+        def lo2 ((nd "lo" get) key tst-delete) (nd lo2 with-lo) tprune
       ] [
         if (c ndc gt) [
-          def hi2 ((node "hi" get) key tst-delete) (node hi2 with-hi) tprune
+          def hi2 ((nd "hi" get) key tst-delete) (nd hi2 with-hi) tprune
         ] [
           def rest (key slice 1 (key size))
-          if ((rest size) eq 0) [ (node [] false with-end-val) tprune ] [
-            def mid2 ((node "mid" get) rest tst-delete) (node mid2 with-mid) tprune
+          if ((rest size) eq 0) [ (nd [] false with-end-val) tprune ] [
+            def mid2 ((nd "mid" get) rest tst-delete) (nd mid2 with-mid) tprune
           ]
         ]
       ]

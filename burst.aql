@@ -6,7 +6,7 @@
 #   BurstSet — a set of Strings (membership), over the same engine.
 #
 # A burst trie keeps keys in small *buckets* until a bucket grows past a
-# threshold, at which point it *bursts* into a trie node whose children are
+# threshold, at which point it *bursts* into a trie nd whose children are
 # fresh sub-buckets keyed by the next character. The shallow trie spine
 # stays small while most keys live in flat, cache-friendly buckets — the
 # idea a HAT-trie exploits for speed. (A true bitmap/array-mapped trie wants
@@ -15,13 +15,13 @@
 #
 # --- representation -------------------------------------------------
 #
-# A node is one of two tagged Maps:
+# A nd is one of two tagged Maps:
 #
 #   bucket: { kind: "bucket", items: [[suffix, value], …] }
-#   trie:   { kind: "trie", end: Boolean, val: Any, kids: [[char, node], …] }
+#   trie:   { kind: "trie", end: Boolean, val: Any, kids: [[char, nd], …] }
 #
 # A bucket holds the *remaining* suffixes of keys routed to it, paired with
-# their values. A trie node routes by one character and may itself end
+# their values. A trie nd routes by one character and may itself end
 # a key. The empty tree is an empty bucket, so a tree is always a Map.
 #
 # Trees are PERSISTENT: mutators return a new tree. Paths are assembled with
@@ -39,7 +39,7 @@
 def burst-limit fn [ [] [Integer] [8] ]
 
 
-# --- node construction ----------------------------------------------
+# --- nd construction ----------------------------------------------
 
 def mk-bucket fn [ [items:Any] [Map] [ do {kind: ["bucket"], items: [items]} ] ]
 
@@ -50,14 +50,14 @@ def mk-trienode fn [
   ]
 ]
 
-def is-bucket fn [ [node:Map] [Boolean] [ (node "kind" get) "bucket" eq ] ]
+def is-bucket fn [ [nd:Map] [Boolean] [ (nd "kind" get) "bucket" eq ] ]
 
-# A node holding nothing: an empty bucket, or a trie node with no key and no
+# A nd holding nothing: an empty bucket, or a trie nd with no key and no
 # children. Such nodes are pruned after a delete.
 def is-empty fn [
-  [node:Map] [Boolean] [
-    if (node is-bucket) [ ((node "items" get) size) eq 0 ] [
-      ((node "end" get) not) and (((node "kids" get) size) eq 0)
+  [nd:Map] [Boolean] [
+    if (nd is-bucket) [ ((nd "items" get) size) eq 0 ] [
+      ((nd "end" get) not) and (((nd "kids" get) size) eq 0)
     ]
   ]
 ]
@@ -89,56 +89,56 @@ def bucket-del fn [
   ]
 ]
 
-# The child node under char `ch`, or `none`. Call: `node ch find-kid`.
+# The child nd under char `ch`, or `none`. Call: `nd ch find-kid`.
 def find-kid fn [
-  [ch:String node:Map] [Any] [
-    none (node "kids" get) [ var [[pair acc] if ((pair get 0) ch eq) [pair get 1] [acc] ] ] fold
+  [ch:String nd:Map] [Any] [
+    none (nd "kids" get) [ var [[pair acc] if ((pair get 0) ch eq) [pair get 1] [acc] ] ] fold
   ]
 ]
 
-# `node` with the child under `ch` replaced by `child`. Call: `node ch child put-kid`.
+# `nd` with the child under `ch` replaced by `child`. Call: `nd ch child put-kid`.
 def put-kid fn [
-  [child:Map ch:String node:Map] [Map] [
-    def kept ([] (node "kids" get) [ var [[pair acc] if ((pair get 0) ch eq) [acc] [acc pair push] ] ] fold)
+  [child:Map ch:String nd:Map] [Map] [
+    def kept ([] (nd "kids" get) [ var [[pair acc] if ((pair get 0) ch eq) [acc] [acc pair push] ] ] fold)
     def kids2 (kept [ch child] push)
-    kids2 (node "val" get) (node "end" get) mk-trienode
+    kids2 (nd "val" get) (nd "end" get) mk-trienode
   ]
 ]
 
-# `node` with the child under `ch` removed. Call: `node ch drop-kid`.
+# `nd` with the child under `ch` removed. Call: `nd ch drop-kid`.
 def drop-kid fn [
-  [ch:String node:Map] [Map] [
-    def kept ([] (node "kids" get) [ var [[pair acc] if ((pair get 0) ch eq) [acc] [acc pair push] ] ] fold)
-    kept (node "val" get) (node "end" get) mk-trienode
+  [ch:String nd:Map] [Map] [
+    def kept ([] (nd "kids" get) [ var [[pair acc] if ((pair get 0) ch eq) [acc] [acc pair push] ] ] fold)
+    kept (nd "val" get) (nd "end" get) mk-trienode
   ]
 ]
 
 
 # --- core: insert + burst -------------------------------------------
 
-# Insert `key` → `val` into `node`. A bucket that overflows
-# bursts into a trie node. Call: `node key val b-insert`.
+# Insert `key` → `val` into `nd`. A bucket that overflows
+# bursts into a trie nd. Call: `nd key val b-insert`.
 def b-insert fn [
-  [val:Any key:String node:Map] [Map] [
-    if (node is-bucket) [
-      def items2 ((node "items" get) key val bucket-set)
+  [val:Any key:String nd:Map] [Map] [
+    if (nd is-bucket) [
+      def items2 ((nd "items" get) key val bucket-set)
       if ((items2 size) gt (burst-limit)) [ items2 b-burst ] [ items2 mk-bucket ]
     ] [
-      if ((key size) eq 0) [ (node "kids" get) val true mk-trienode ] [
+      if ((key size) eq 0) [ (nd "kids" get) val true mk-trienode ] [
         def ch (key slice 0 1)
         def rest (key slice 1 (key size))
-        def child (node ch find-kid)
+        def child (nd ch find-kid)
         def child2 (if (child eq none)
           [ ([] mk-bucket) rest val b-insert ]
           [ child rest val b-insert ])
-        node ch child2 put-kid
+        nd ch child2 put-kid
       ]
     ]
   ]
 ]
 
-# Burst a bucket's items into a trie node by re-inserting each into an empty
-# trie node (which routes them into fresh sub-buckets). Call: `items b-burst`.
+# Burst a bucket's items into a trie nd by re-inserting each into an empty
+# trie nd (which routes them into fresh sub-buckets). Call: `items b-burst`.
 def b-burst fn [
   [items:List] [Map] [
     def start ([] [] false mk-trienode)
@@ -149,16 +149,16 @@ def b-burst fn [
 
 # --- core: locate ---------------------------------------------------
 
-# The value bound to `key`, or `none` if absent. Call: `node key b-getval`.
+# The value bound to `key`, or `none` if absent. Call: `nd key b-getval`.
 # (`none` is ambiguous between absent and a stored `none` value — use
 # `b-member` for membership, which keys off structure, not the value.)
 def b-getval fn [
-  [key:String node:Map] [Any] [
-    if (node is-bucket) [ (node "items" get) key bucket-find ] [
-      if ((key size) eq 0) [ if (node "end" get) [node "val" get] [none] ] [
+  [key:String nd:Map] [Any] [
+    if (nd is-bucket) [ (nd "items" get) key bucket-find ] [
+      if ((key size) eq 0) [ if (nd "end" get) [nd "val" get] [none] ] [
         def ch (key slice 0 1)
         def rest (key slice 1 (key size))
-        def child (node ch find-kid)
+        def child (nd ch find-kid)
         if (child eq none) [none] [ child rest b-getval ]
       ]
     ]
@@ -173,14 +173,14 @@ def bucket-has fn [
 ]
 
 # Structural membership for `key` (independent of the stored value, so it is
-# correct even when the value is `none`). Call: `node key b-member`.
+# correct even when the value is `none`). Call: `nd key b-member`.
 def b-member fn [
-  [key:String node:Map] [Boolean] [
-    if (node is-bucket) [ (node "items" get) key bucket-has ] [
-      if ((key size) eq 0) [ node "end" get ] [
+  [key:String nd:Map] [Boolean] [
+    if (nd is-bucket) [ (nd "items" get) key bucket-has ] [
+      if ((key size) eq 0) [ nd "end" get ] [
         def ch (key slice 0 1)
         def rest (key slice 1 (key size))
-        def child (node ch find-kid)
+        def child (nd ch find-kid)
         if (child eq none) [false] [ child rest b-member ]
       ]
     ]
@@ -198,17 +198,17 @@ def starts-with fn [
   ]
 ]
 
-# Append every key at or below `node` (prefixed by `prefix`) to `acc`.
-# Call: `acc prefix node collect-b`.
+# Append every key at or below `nd` (prefixed by `prefix`) to `acc`.
+# Call: `acc prefix nd collect-b`.
 def collect-b fn [
-  [node:Map prefix:String acc:List] [List] [
-    if (node is-bucket) [
-      acc (node "items" get) [
+  [nd:Map prefix:String acc:List] [List] [
+    if (nd is-bucket) [
+      acc (nd "items" get) [
         var [[pair a] def np (prefix (pair get 0) add) a np push ]
       ] fold
     ] [
-      def acc1 (if (node "end" get) [acc prefix push] [acc])
-      acc1 (node "kids" get) [
+      def acc1 (if (nd "end" get) [acc prefix push] [acc])
+      acc1 (nd "kids" get) [
         var [[pair a] def np (prefix (pair get 0) add) (a np (pair get 1) collect-b) ]
       ] fold
     ]
@@ -216,12 +216,12 @@ def collect-b fn [
 ]
 
 # Keys at or below `prefix`. `consumed` is the path already walked.
-# Call: `acc consumed prefix node navigate-prefix`.
+# Call: `acc consumed prefix nd navigate-prefix`.
 def navigate-prefix fn [
-  [node:Map prefix:String consumed:String acc:List] [List] [
-    if ((prefix size) eq 0) [ acc consumed node collect-b ] [
-      if (node is-bucket) [
-        acc (node "items" get) [
+  [nd:Map prefix:String consumed:String acc:List] [List] [
+    if ((prefix size) eq 0) [ acc consumed nd collect-b ] [
+      if (nd is-bucket) [
+        acc (nd "items" get) [
           var [[pair a]
             def suf (pair get 0)
             if (suf prefix starts-with) [ def np (consumed suf add) a np push ] [a]
@@ -230,7 +230,7 @@ def navigate-prefix fn [
       ] [
         def ch (prefix slice 0 1)
         def rest (prefix slice 1 (prefix size))
-        def child (node ch find-kid)
+        def child (nd ch find-kid)
         if (child eq none) [acc] [
           def nc (consumed ch add)
           (acc nc rest child navigate-prefix)
@@ -241,11 +241,11 @@ def navigate-prefix fn [
 ]
 
 # Longest stored key that is a prefix of `key`. `consumed` is the path so
-# far; `best` the best terminating prefix seen. Call: `best consumed key node longest-b`.
+# far; `best` the best terminating prefix seen. Call: `best consumed key nd longest-b`.
 def longest-b fn [
-  [node:Map key:String consumed:String best:Any] [Any] [
-    if (node is-bucket) [
-      best (node "items" get) [
+  [nd:Map key:String consumed:String best:Any] [Any] [
+    if (nd is-bucket) [
+      best (nd "items" get) [
         var [[pair acc]
           def suf (pair get 0)
           if (key suf starts-with) [
@@ -256,11 +256,11 @@ def longest-b fn [
         ]
       ] fold
     ] [
-      def best2 (if (node "end" get) [consumed] [best])
+      def best2 (if (nd "end" get) [consumed] [best])
       if ((key size) eq 0) [best2] [
         def ch (key slice 0 1)
         def rest (key slice 1 (key size))
-        def child (node ch find-kid)
+        def child (nd ch find-kid)
         if (child eq none) [best2] [
           def nc (consumed ch add)
           (best2 nc rest child longest-b)
@@ -270,21 +270,21 @@ def longest-b fn [
   ]
 ]
 
-# Number of keys at or below `node`. Call: `node count-b`.
+# Number of keys at or below `nd`. Call: `nd count-b`.
 def count-b fn [
-  [node:Map] [Integer] [
-    if (node is-bucket) [ (node "items" get) size ] [
-      def here (if (node "end" get) [1] [0])
-      here (node "kids" get) [ var [[pair acc] acc ((pair get 1) count-b) add ] ] fold
+  [nd:Map] [Integer] [
+    if (nd is-bucket) [ (nd "items" get) size ] [
+      def here (if (nd "end" get) [1] [0])
+      here (nd "kids" get) [ var [[pair acc] acc ((pair get 1) count-b) add ] ] fold
     ]
   ]
 ]
 
-# Structural depth in nodes (a bucket counts as 1). Call: `node height-b`.
+# Structural depth in nodes (a bucket counts as 1). Call: `nd height-b`.
 def height-b fn [
-  [node:Map] [Integer] [
-    if (node is-bucket) [1] [
-      def kmax (0 (node "kids" get) [
+  [nd:Map] [Integer] [
+    if (nd is-bucket) [1] [
+      def kmax (0 (nd "kids" get) [
         var [[pair acc] def h ((pair get 1) height-b) if (h gt acc) [h] [acc] ]
       ] fold)
       kmax 1 add
@@ -295,18 +295,18 @@ def height-b fn [
 
 # --- core: delete ---------------------------------------------------
 
-# Remove `key` from `node`, pruning emptied buckets and nodes.
-# Call: `node key b-delete`.
+# Remove `key` from `nd`, pruning emptied buckets and nodes.
+# Call: `nd key b-delete`.
 def b-delete fn [
-  [key:String node:Map] [Map] [
-    if (node is-bucket) [ ((node "items" get) key bucket-del) mk-bucket ] [
-      if ((key size) eq 0) [ (node "kids" get) [] false mk-trienode ] [
+  [key:String nd:Map] [Map] [
+    if (nd is-bucket) [ ((nd "items" get) key bucket-del) mk-bucket ] [
+      if ((key size) eq 0) [ (nd "kids" get) [] false mk-trienode ] [
         def ch (key slice 0 1)
         def rest (key slice 1 (key size))
-        def child (node ch find-kid)
-        if (child eq none) [node] [
+        def child (nd ch find-kid)
+        if (child eq none) [nd] [
           def child2 (child rest b-delete)
-          if (child2 is-empty) [ node ch drop-kid ] [ node ch child2 put-kid ]
+          if (child2 is-empty) [ nd ch drop-kid ] [ nd ch child2 put-kid ]
         ]
       ]
     ]
