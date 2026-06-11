@@ -1,7 +1,7 @@
 # Ternary-search-tree tests using aql:test's imperative API.
 #
 # Run:
-#   aql test/tst_test.aql
+#   aql test/tst_unit_test.aql
 
 
 import "aql:test"

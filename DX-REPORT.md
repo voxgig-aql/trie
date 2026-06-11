@@ -293,6 +293,21 @@ trades the bitmap-packing trick for flat buckets — and buckets are just
 
 ---
 
+## Static checking (`aql check`)
+
+`aql check` is wired into CI as an **advisory, non-gating** step (`--soft` +
+`continue-on-error`), not a hard gate. This library is deliberately generic —
+every node is a plain Map walked by stack-dispatched words, and the namespace
+surface is exported by reference (`map-add/r`, …) — so the structural checker
+can't trace those reference exports or the dynamic dispatch, and reports false
+`unused_def`/`no_signature` diagnostics on code the suites prove correct. The
+runnable suites are the real gate. The full per-module catalogue of what the
+checker reports and why each report is a false positive lives in
+[`AQL-CHECK-REPORT.md`](AQL-CHECK-REPORT.md) — project-specific evidence to
+re-run on each aql bump, not template-core.
+
+---
+
 ## Bottom line
 
 I shipped four working, cross-checked, persistent trie variants with fuzzy

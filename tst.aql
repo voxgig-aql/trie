@@ -27,6 +27,11 @@
 # TSTs here are PERSISTENT: every mutator returns a new tree, rebuilding the
 # nodes along the edited path. Paths are assembled with core `add`.
 #
+# Calling convention: like the rest of AQL, the receiver comes first and the
+# arguments follow — `t key val TstMap.set`. Forward args have precedence, so
+# a call resolves at the next word or paren; `end`/parens are needed only to
+# separate a call from a following bare literal.
+#
 # Imported via `import "./tst.aql"`.
 
 
@@ -118,7 +123,7 @@ def find-node fn [
 ]
 
 
-# --- traversal (in-order ⇒ sorted) ----------------------------------
+# --- traversal (in-order => sorted) ---------------------------------
 
 # Append every terminating key at or below `node` (prefixed by `prefix`) to
 # `acc`. Call: `acc prefix node collect-t`.

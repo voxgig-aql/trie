@@ -2,7 +2,7 @@
 #
 # This file exercises aql:test's declarative property surface: `Test.prop`
 # builds a PropertySpec as data, and `Test.run-property` runs it at the
-# default 100 iterations. The sibling file `test/trie_pbt.aql` covers the
+# default 100 iterations. The sibling file `test/trie_prop_test.aql` covers the
 # same ideas through the imperative `Test.check-prop` driver.
 #
 # GEN-BODY runs with `r` (a seeded aql:rand instance) in scope and must leave
@@ -185,7 +185,7 @@ def specs [
 
 
 def _ (specs each [
-  var [[s] (s Test.run-property) report 0 ]
+  var [[s] (s Test.run-property end) report 0 ]
 ])
 
 

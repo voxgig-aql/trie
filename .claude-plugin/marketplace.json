@@ -1,0 +1,14 @@
+{
+  "name": "voxgig-aql",
+  "owner": { "name": "voxgig-aql" },
+  "description": "Plugins for the voxgig AQL ecosystem.",
+  "plugins": [
+    {
+      "name": "trie-aql",
+      "source": "./plugins/trie-aql",
+      "description": "Agent guidance for using the trie utilities library from AQL.",
+      "version": "0.1.0",
+      "license": "MIT"
+    }
+  ]
+}

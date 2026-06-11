@@ -6,6 +6,9 @@ it returns. For *why* the variants behave as they do, see
 [Explanation](explanation.md); for goal-directed recipes, see the
 [How-to guides](how-to.md).
 
+> **AI agents:** [AGENTS.md](../AGENTS.md) condenses the calling
+> convention, idioms, and common mistakes for machine use.
+
 The library is four modules, each exporting two namespaces over a shared
 engine:
 
