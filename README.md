@@ -72,37 +72,57 @@ modes, each serving a different need:
 | 📖 | **[Reference](docs/reference.md)** | look up exact words, signatures, and return types |
 | 💡 | **[Explanation](docs/explanation.md)** | understand how each variant works and why it's built this way |
 
-**For AI coding agents:** start with [`CLAUDE.md`](CLAUDE.md) (also available as
-[`AGENTS.md`](AGENTS.md)) — a compact guide to importing, calling, and the AQL
-foot-guns to avoid. A machine-readable API manifest is in [`api.json`](api.json).
-
 New here? Start with the [Tutorial](docs/tutorial.md). Just want the API?
 Jump to the [Reference](docs/reference.md).
+
+## For AI coding agents
+
+If an agent will call this library, point it at **[AGENTS.md](AGENTS.md)** —
+the AQL calling convention, the four variants, verified idioms, and the common
+mistakes to avoid. A machine-readable API manifest is in
+[`api.json`](api.json); Claude Code also auto-loads `AGENTS.md` via
+[`CLAUDE.md`](CLAUDE.md).
+
+To make that guidance available in *another* project that uses this library,
+install the bundled skill either way:
+
+- **Copy the skill** — drop
+  [`.claude/skills/trie-aql/`](.claude/skills/trie-aql/SKILL.md) into that
+  project's `.claude/skills/` (or your `~/.claude/skills/`). It loads on demand
+  whenever trie calls appear.
+- **Install the plugin** — this repo is also a plugin marketplace:
+
+  ```
+  /plugin marketplace add voxgig-aql/trie
+  /plugin install trie-aql@voxgig-aql
+  ```
 
 ## Project layout
 
 ```
-trie.aql                  standard trie        (TrieSet,  TrieMap)
-radix.aql                 radix / PATRICIA     (RadixSet, RadixMap)
-tst.aql                   ternary search tree  (TstSet,   TstMap)
-burst.aql                 burst / HAT trie     (BurstSet, BurstMap)
-test/smoke.aql                smoke demo across all four variants
-test/<variant>_test.aql       example-based unit tests
-test/<variant>_prop_spec.aql  property-based tests (declarative spec form)
-test/trie_pbt.aql             property-based tests (direct test.check-prop form)
-docs/                     Diátaxis documentation (above)
-DX-REPORT.md              developer-experience notes on building this in AQL
+trie.aql                       standard trie        (TrieSet,  TrieMap)
+radix.aql                      radix / PATRICIA     (RadixSet, RadixMap)
+tst.aql                        ternary search tree  (TstSet,   TstMap)
+burst.aql                      burst / HAT trie     (BurstSet, BurstMap)
+test/<variant>_unit_test.aql   example-based unit tests — direct (one per variant)
+test/trie_unit_spec.aql        example-based unit tests — declarative spec (standard trie)
+test/<variant>_prop_spec.aql   property-based tests — declarative spec
+test/trie_prop_test.aql        property-based tests — direct (Test.check-prop)
+test/trie_smoke_test.aql       smoke demo across all four variants
+docs/                          Diátaxis documentation (above)
+dx-report.md                   developer-experience notes on building this in AQL
 ```
 
 ## Running it
 
 Build the `aql` interpreter, then run the demo or any test — see
-[How-to → Install and run](docs/how-to.md#install-and-run-aql):
+[How-to → Install and run](docs/how-to.md#install-and-run-aql) and
+[Run the tests](docs/how-to.md#run-the-tests):
 
 ```bash
-aql test/smoke.aql             # smoke demo
-aql test/trie_test.aql         # unit tests (one suite per variant)
-aql test/trie_prop_spec.aql    # property tests
+aql test/trie_smoke_test.aql   # smoke demo across all variants
+aql test/trie_unit_test.aql    # unit tests (standard trie; one suite per variant)
+aql test/trie_prop_spec.aql    # property tests (standard trie)
 ```
 
 A GitHub Actions workflow ([`ci/test.yml`](ci/test.yml)) builds aql from
