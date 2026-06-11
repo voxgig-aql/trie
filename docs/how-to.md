@@ -28,7 +28,9 @@ the repo's replace directives):
 
 ```bash
 git clone https://github.com/aql-lang/aql /tmp/aql-source
-cd /tmp/aql-source/cmd/go
+cd /tmp/aql-source
+git checkout db828ecb6ee1d161ff177134478f42c56484f051   # the commit CI pins (.github/workflows/test.yml AQL_REF)
+cd cmd/go
 GOFLAGS=-mod=mod go build -o "$HOME/.local/bin/aql" ./aql
 ```
 
@@ -40,7 +42,7 @@ aql test/trie_smoke_test.aql
 ```
 
 This library is verified against aql commit `db828ec`; the CI workflow
-(`ci/test.yml`) pins the same commit.
+(`.github/workflows/test.yml`) pins the same commit.
 
 ---
 
@@ -254,5 +256,5 @@ aql test/burst_prop_spec.aql   # property tests — burst (with trie cross-check
 ```
 
 Each file ends by asserting `test.fail-count` is `0`, so a failure makes
-`aql` exit non-zero — which is what the [CI workflow](../ci/test.yml)
+`aql` exit non-zero — which is what the [CI workflow](../.github/workflows/test.yml)
 checks on every push and pull request.

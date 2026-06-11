@@ -125,11 +125,10 @@ aql test/trie_unit_test.aql    # unit tests (standard trie; one suite per varian
 aql test/trie_prop_spec.aql    # property tests (standard trie)
 ```
 
-A GitHub Actions workflow ([`ci/test.yml`](ci/test.yml)) builds aql from
-a pinned commit and runs every suite on each push and pull request. It is
-staged under `ci/` rather than `.github/workflows/` because the token
-that created this branch lacked GitHub `workflow` scope; move it into
-place to activate it — see [`ci/README.md`](ci/README.md).
+A GitHub Actions workflow
+([`.github/workflows/test.yml`](.github/workflows/test.yml)) builds aql from a
+pinned commit and runs every suite — plus a `consistency` job (agent-skill
+drift, JSON manifests, and a pinned-ref guard) — on each push and pull request.
 
 ## License
 

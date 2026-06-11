@@ -201,7 +201,7 @@ Read `dx-report.md` for the full account; the load-bearing AQL traps are:
 
 To add a variant: mirror an existing module's structure, export a `…Set` and a
 `…Map`, add `test/<variant>_unit_test.aql` plus `test/<variant>_prop_spec.aql`
-(keep the trie-equivalence cross-check), and add the new suites to `ci/test.yml`.
+(keep the trie-equivalence cross-check), and add the new suites to `.github/workflows/test.yml`.
 Test files follow `<subject>_<unit|prop>_<test|spec>.aql`: `_test` = imperative
 (`Test.test`/`Test.check-prop`), `_spec` = declarative; the standard trie ships
 all four surfaces (`trie_unit_test`, `trie_unit_spec`, `trie_prop_test`,
