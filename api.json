@@ -1,18 +1,18 @@
 {
   "name": "trie",
-  "version": "0.1.0",
-  "aql_ref": "db828ec",
+  "version": "0.2.0",
+  "aql_ref": "958c379b",
   "description": "Prefix-tree (trie) utilities for AQL: four variants, each as a Set and a Map.",
   "conventions": {
     "import": "forward form, no terminator: import \"./trie.aql\"",
     "call": "trie words are receiver-first (t key value Map.set) so results pipe; forward arguments have precedence and a call resolves at the next function word or paren, so a terminator is usually unnecessary",
     "disambiguation": "only when a bare type-compatible literal immediately follows a stack-form call: use parens, a trailing `end`, or the `/s` modifier (force stack) e.g. `5 5 cmp/s 9`",
     "immutable": "add/set/delete return a NEW trie; rebind the result",
-    "outputs_sorted": "keys, values, entries, with-prefix, keys-with-prefix return sorted keys",
+    "outputs_sorted": "keys, values, entries, with-prefix, keys-with-prefix, entries-with-prefix return key-sorted output",
     "absent": "get returns none, has returns false for absent keys (never an error)",
     "import_resolution": "relative to the working directory, not the importing file",
-    "external_deps": [],
-    "no_string_decode": "round-trip via keys+from-keys or entries+from-entries",
+    "external_deps": ["aql:struct-util (standard module shipped with the interpreter)"],
+    "codec": "decode is the inverse of encode (raises a catchable error on a payload of the wrong kind); data-level round-trips via keys+from-keys or entries+from-entries also work",
     "call_placeholder": "in word_specs, `Set`/`Map` stands for the concrete namespace name (e.g. RadixSet.add, TstMap.get)"
   },
   "modules": {
@@ -33,7 +33,8 @@
       "size":           { "call": "t Set.size end",               "args": ["t:trie"],                                  "returns": "Integer" },
       "height":         { "call": "t Set.height end",             "args": ["t:trie"],                                  "returns": "Integer", "note": "structural depth; per-variant, not comparable across variants" },
       "from-keys":      { "call": "keys Set.from-keys end",       "args": ["keys:List<String>"],                       "returns": "trie", "note": "inverse of keys" },
-      "encode":         { "call": "t Set.encode end",             "args": ["t:trie"],                                  "returns": "String", "note": "one-way jsonic snapshot; no decode" }
+      "encode":         { "call": "t Set.encode end",             "args": ["t:trie"],                                  "returns": "String", "note": "JSON snapshot (StructUtil.jsonify of {kind, size, keys})" },
+      "decode":         { "call": "s Set.decode end",             "args": ["s:String"],                                "returns": "trie", "note": "inverse of encode; raises a catchable error if the payload kind does not match this variant" }
     },
     "set_trie_only": {
       "within":         { "call": "t query k Set.within end",     "args": ["t:trie", "query:String", "k:Integer"],     "returns": "List<String>", "note": "Levenshtein distance <= k; TrieSet only" },
@@ -54,7 +55,8 @@
       "size":                { "call": "t Map.size end",                     "args": ["t:trie"],                                          "returns": "Integer" },
       "height":              { "call": "t Map.height end",                   "args": ["t:trie"],                                          "returns": "Integer", "note": "structural depth; per-variant" },
       "from-entries":        { "call": "entries Map.from-entries end",       "args": ["entries:List<[String, Any]>"],                     "returns": "trie", "note": "inverse of entries" },
-      "encode":              { "call": "t Map.encode end",                   "args": ["t:trie"],                                          "returns": "String", "note": "one-way jsonic snapshot; no decode" }
+      "encode":              { "call": "t Map.encode end",                   "args": ["t:trie"],                                          "returns": "String", "note": "JSON snapshot (StructUtil.jsonify of {kind, size, entries}); a stored none serialises as null and decodes back to none" },
+      "decode":              { "call": "s Map.decode end",                   "args": ["s:String"],                                        "returns": "trie", "note": "inverse of encode; raises a catchable error if the payload kind does not match this variant" }
     },
     "map_trie_only": {
       "within":              { "call": "t query k Map.within end",           "args": ["t:trie", "query:String", "k:Integer"],             "returns": "List<String>", "note": "Levenshtein distance <= k; TrieMap only; returns keys" },

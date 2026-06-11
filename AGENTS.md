@@ -5,8 +5,9 @@ a downstream project) and **extending** it. Human docs: `README.md`, `docs/`
 (Diátaxis), full signatures in `docs/reference.md`, machine-readable API in
 `api.json`, design notes and AQL foot-guns in `DX-REPORT.md`.
 
-This library is **pure core AQL** — the four modules import no `aql:*`
-dependencies. Verified against `aql` commit `db828ec`.
+The four modules depend only on the **standard `aql:struct-util` module**
+(map enumeration + jsonic parse/serialise), which ships with the interpreter —
+no third-party dependencies. Verified against `aql` commit `958c379b`.
 
 ---
 
@@ -106,9 +107,11 @@ def m (((TrieMap.make) "GET" 1 TrieMap.set) "POST" 2 TrieMap.set)
 (s "aple" 1 TrieSet.within) print        # keys within Levenshtein distance 1
 (s "ap*"  TrieSet.match) print            # `?` = one char, `*` = any run
 
-# Persist + rebuild (there is no string `decode`).
-def snapshot (m TrieMap.entries)         # serialize these however you like
-def m2 (snapshot TrieMap.from-entries)   # …and rebuild later  (sets: keys + from-keys)
+# Persist + rebuild: encode/decode round-trip (decode raises a catchable
+# error on a payload of the wrong kind).
+def snapshot (m TrieMap.encode)          # JSON text — write it anywhere
+def m2 (snapshot TrieMap.decode)         # …and rebuild later
+# Data-level round-trips also work: keys+from-keys, entries+from-entries.
 ```
 
 ---
@@ -118,13 +121,13 @@ def m2 (snapshot TrieMap.from-entries)   # …and rebuild later  (sets: keys + f
 `Set` namespaces (`TrieSet`, `RadixSet`, `TstSet`, `BurstSet`):
 
 `make` · `add` · `has` · `delete` · `with-prefix` · `longest-prefix` · `keys` ·
-`size` · `height` · `from-keys` · `encode`
+`size` · `height` · `from-keys` · `encode` · `decode`
 
 `Map` namespaces (`TrieMap`, `RadixMap`, `TstMap`, `BurstMap`):
 
 `make` · `set` · `get` · `has` · `delete` · `keys-with-prefix` ·
 `entries-with-prefix` · `longest-prefix` · `keys` · `values` · `entries` ·
-`size` · `height` · `from-entries` · `encode`
+`size` · `height` · `from-entries` · `encode` · `decode`
 
 `TrieSet`/`TrieMap` add `within` (fuzzy) and `match` (wildcard).
 
@@ -141,18 +144,24 @@ Exact call-forms, arg order, and return types: `api.json` (structured) and
 3. **Forward args have precedence**; a call resolves at the next function word
    or paren. Add parens, `end`, or `/s` (force stack) only to stop a bare
    following literal from being grabbed as an argument.
-4. `keys`, `values`, `entries`, `with-prefix`, `keys-with-prefix` are **sorted**.
+4. `keys`, `values`, `entries`, `with-prefix`, `keys-with-prefix`,
+   `entries-with-prefix` are **key-sorted**.
 5. `get` returns `none` and `has` returns `false` for an absent key — never an
    error. Use `has` to tell "absent" from "present with value `none`".
 6. `within` / `match` exist on **`TrieSet`/`TrieMap` only**. For another
    variant, pull its `keys`/`entries` and rebuild a `TrieSet`/`TrieMap`.
-7. There is **no string `decode`**. Round-trip via `keys`+`from-keys` or
-   `entries`+`from-entries`.
+7. **`decode` is strict about variants**: each namespace decodes only its own
+   `encode` payloads and **raises** (catchable with `do […] error […]`) on any
+   other kind. Cross-variant transfer goes through the data words
+   (`keys`+`from-keys`, `entries`+`from-entries`).
 8. An **empty `TstSet`/`TstMap` is `none`**, not a Map — only relevant if you
    inspect the raw trie value rather than calling namespace words.
-9. To compare two key lists, use `assert.equal` (deep) or compare element-wise —
-   **AQL's `eq` on lists is identity, not structural** (`["a"] ["a"] eq` is
-   `false`).
+9. To compare two key lists, use **`deq`** (structural deep equality) or
+   `Assert.equal` in tests — **AQL's `eq` on lists is identity, not structural**
+   (`["a"] ["a"] eq` is `false`, `["a"] ["a"] deq` is `true`).
+10. A value read back through `decode` compares equal under `eq`/`deq`, but a
+    decoded `none` (JSON `null` hydrated) is **not** `Assert.equal` to the
+    `none` literal — assert with `eq` in that one case.
 
 ---
 
@@ -166,9 +175,9 @@ aql test/smoke.aql                  # library smoke demo across all variants
 for f in test/*.aql; do aql "$f"; done   # full suite (each ends "all green")
 ```
 
-In this repo a SessionStart hook (`.claude/settings.json` → `ci/setup.sh`)
-builds `aql` from the pinned commit if needed and runs the smoke check, so a
-fresh session is ready to verify.
+In this repo a SessionStart hook (`.claude/settings.json` →
+`.claude/hooks/session-start.sh`) builds `aql` from the pinned commit if needed
+and runs the smoke check, so a fresh session is ready to verify.
 
 ---
 
@@ -176,28 +185,50 @@ fresh session is ready to verify.
 
 Read `DX-REPORT.md` for the full account; the load-bearing AQL traps are:
 
-- **Never `merge` to update a node** — `merge` is a *deep, index-wise* merge and
-  fuses sibling lists. Rebuild nodes with the explicit `mk-*` constructor.
-- **Signature order = reverse of call order** (first parameter = top of stack),
-  and a namespace word whose top-of-stack type doesn't match **fails silently**
-  (returns the function as data). Write the intended call form in a comment.
-- **Reserved binding names** cannot be `def`/param/`var` names: `end`, `node`,
-  `eq`, `base`, single capital letters (type names), and other core words —
-  the interpreter rejects redefining a core word.
-- **Index lists as `xs get (i)`**, not `xs get i` (a bare variable index returns
-  `none`).
+- **Children are computed-key Maps** (`{[k]: v}` literals, copy-returning
+  `kids set (ch) child`, `StructUtil.items` enumeration — items is
+  **key-sorted**, which is what makes traversal output sorted by
+  construction). There is **no key-removal word**: to drop a key, rebuild the
+  map from its items, skipping the key.
+- **Never use `StructUtil.merge` to update a node** — it is a *deep,
+  index-wise* merge (`merge` is no longer a core word). Rebuild nodes with the
+  explicit `mk-*` constructor; `StructUtil.setpath` is the one-field update if
+  you ever need it.
+- **Signature order = reverse of call order** (first parameter = top of stack).
+  A namespace word whose top-of-stack type doesn't match no longer fails
+  silently — the runtime raises `uncalled_function` at end of run, and
+  `aql check` flags it — but still write the intended call form in a comment.
+- **Reserved binding names**: `end` (call terminator) and **`node`** (a
+  built-in word since the Flex-container work — this library names node
+  bindings `nd`). Most names that used to be rejected (`eq`, `L`, single
+  capitals) now work, but avoid shadowing core words you call.
+- **Index lists as `xs get (i)`**, not `xs get i` — a bare word after `get` is
+  a *literal* key (JS `.key`), a parenthesised one is *computed* (JS `[expr]`).
+  This is defined semantics now, not a bug.
 - **Build path strings with core `add`** (`pfx ch add`); `concat`/`indexof`/
-  `contains` now live in `aql:string-util` (`StringUtil.*`).
+  `contains` live in `aql:string-util`, which is now **subject-last**
+  (`StringUtil.contains needle haystack` forward; haystack pushed first in
+  stack form).
 - **`fold` binds `[element accumulator]`** (element first, accumulator on top).
-- **Receiverless Reach lenses** (`$.field`, `$.0`) are inert `Reach` values that
-  `each`/`filter`/`sortby` apply per element — `(t map-entries) each $.1` plucks
-  the value column. They only express a *plain* field/index read, so they can't
-  replace the child-list folds, which couple a key-equality test against a
-  runtime char with a recursive descent. `filter` also needs a real `Function`
-  or `Reach`, not a `[ var [...] ]` block, so the keep-folds stay as folds.
-- Values can be stored **directly** in a `do {…}` node — earlier aql evaluated
-  map values as code (so a String naming a word was dispatched, which forced a
-  "boxing" workaround), but `db828ec` fixed it.
+- **A var-bound name does not resolve inside a nested list literal** —
+  `var [[pair a] … a [np (pair get 1)] push]` fails with `undefined word`;
+  bind through `def` first (`def v (pair get 1)`, then `[np v]`).
+- **`filter` now takes a `[…]` quotation** like `each`/`fold` (var-destructure
+  bodies included), so keep-folds are only needed when the predicate must see
+  the accumulator.
+- **Receiverless Reach lenses** (`$.field`, `$.0`) are inert `Reach` values
+  that `each`/`filter` apply per element — `(t map-entries) each $.1` plucks
+  the value column, and `radix.aql` plucks `items` pairs with `each $.1`.
+- **`raise "message"`** raises a catchable error (`do […] error […]`); in the
+  handler, `e "message" get` is **not a plain String** — pass it through
+  `convert String` before comparing.
+- **Serialise with `StructUtil.jsonify`, parse with `StructUtil.parse`.**
+  String-interpolating a structure (`` `${payload}` ``) renders a contained
+  `none` as `None({})`, which does not parse back; `jsonify` writes JSON
+  `null`, which `parse` hydrates to `none`.
+- **Chained sibling prints reverse** (`"a" print (x) print` evaluates out of
+  source order — the one open forward-collection issue). One `end`-terminated
+  print per statement is robust.
 
 To add a variant: mirror an existing module's structure, export a `…Set` and a
 `…Map`, add `test/<variant>_test.aql` plus `test/<variant>_prop_spec.aql` (keep

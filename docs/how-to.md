@@ -38,7 +38,7 @@ aql -version
 aql test/smoke.aql
 ```
 
-This library is verified against aql commit `db828ec`; the CI workflow
+This library is verified against aql commit `958c379b`; the CI workflow
 (`ci/test.yml`) pins the same commit.
 
 ---
@@ -165,27 +165,36 @@ against the standard trie, so the swap is safe.
 
 ---
 
-## Serialize a trie
+## Serialize a trie (and read it back)
 
-`encode` produces a jsonic-style snapshot string — kind, size, and the
-sorted keys (sets) or entries (maps) — for logging or inspection:
+`encode` produces a JSON snapshot string — kind, size, and the sorted keys
+(sets) or entries (maps) — and `decode` rebuilds a trie from it:
 
 ```aql
 def t (((TrieMap.make) "a" 1 TrieMap.set) "b" 2 TrieMap.set)
-(t TrieMap.encode) print
-# => {entries:[['a' 1] ['b' 2]] kind:'triemap' size:2}
+def snapshot (t TrieMap.encode)    # {"entries": [["a", 1], ["b", 2]], "kind": "triemap", "size": 2}
+def t2 (snapshot TrieMap.decode)
+(t2 "b" TrieMap.get) print          # => 2
 ```
 
-There is no string `decode` (AQL exposes no jsonic-string parser). For a
-programmatic round-trip, extract the data and rebuild it:
+`decode` is strict about the payload's `kind`: each namespace reads only
+its own snapshots and **raises** a catchable error on any other (so a
+`radixset` snapshot fed to `TrieMap.decode` fails loudly, not quietly):
 
 ```aql
-def keys (t TrieSet.keys)        # serialize these however you like
-def t2   (keys TrieSet.from-keys)  # …and rebuild later
+do [ (snapshot RadixMap.decode) ] error [ var [[e]
+  (convert String (e "message" get)) print   # names both kinds
+] ]
 ```
 
-For a map use `entries` with `Map.from-entries`. `from-keys`/`from-entries`
-are available on every variant.
+To move keys **between variants** — or to serialize some other way — use
+the data-level round-trip instead; `from-keys`/`from-entries` accept plain
+lists and are available on every variant:
+
+```aql
+def keys (t TrieMap.keys)
+def r    (keys RadixSet.from-keys)   # same keys, different variant
+```
 
 ## Fuzzy and wildcard search (standard trie)
 

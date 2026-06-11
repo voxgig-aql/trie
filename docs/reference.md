@@ -127,9 +127,9 @@ The longest member that is a prefix of `key`, or `none` if no member is.
 ### `Set.from-keys`
 
 Rebuild a set from a list of keys — the inverse of `keys`, so
-`(t keys) from-keys` reproduces `t`. This is the data round-trip for
-`encode` (AQL exposes no jsonic-string parser, so there is no string
-`decode`; serialize `keys` yourself and rebuild with `from-keys`).
+`(t keys) from-keys` reproduces `t`. This is the *data-level* round-trip,
+and the way to move keys **between variants** (`decode` below is strict
+about which variant wrote the snapshot; `from-keys` is not).
 
 | | |
 |--|--|
@@ -156,22 +156,48 @@ Rebuild a set from a list of keys — the inverse of `keys`, so
 
 ### `Set.encode`
 
-A one-way jsonic-style snapshot string carrying the kind, size, and sorted
-keys. Suitable for logging or inspection; there is no `decode`.
+A JSON snapshot string (via `StructUtil.jsonify`) carrying the kind, size,
+and sorted keys — `{"kind": "trieset", "size": …, "keys": […]}`. Feed it
+back to `decode` to rebuild the set.
 
 | | |
 |--|--|
 | **Call** | `t Set.encode end` |
 | **Returns** | `String` |
 
+### `Set.decode`
+
+The inverse of `encode`: parse a snapshot string and rebuild the set.
+Each namespace accepts only its **own** kind (`TrieSet.decode` reads
+`"trieset"` payloads, `RadixSet.decode` reads `"radixset"`, …); any other
+kind **raises** a catchable error naming both kinds — catch it with
+`do […] error […]`. Map namespaces decode their `{kind, size, entries}`
+payloads the same way. To move data *across* variants, use
+`keys`/`from-keys` (or `entries`/`from-entries`) instead.
+
+| | |
+|--|--|
+| **Call** | `s Set.decode end` |
+| **Stack in** | the snapshot `String` |
+| **Returns** | a new trie equal to the encoded one |
+
+```aql
+def snapshot (t TrieSet.encode)
+def t2 (snapshot TrieSet.decode)     # (t TrieSet.keys) == (t2 TrieSet.keys)
+```
+
+A stored `none` value (maps) serialises as JSON `null` and decodes back to
+`none` — it compares equal under `eq`/`deq`, though `Assert.equal` still
+distinguishes the hydrated value from a `none` literal.
+
 ---
 
 ## Map namespaces — `TrieMap`, `RadixMap`, `TstMap`, `BurstMap`
 
 A `Map` carries everything a `Set` does (`make`, `has`, `delete`,
-`longest-prefix`, `keys`, `size`, `height`, `encode`) with `add` replaced
-by `set`, plus the value-oriented words below. `Map` stands for any of the
-four map namespaces.
+`longest-prefix`, `keys`, `size`, `height`, `encode`, `decode`) with `add`
+replaced by `set`, plus the value-oriented words below. `Map` stands for
+any of the four map namespaces.
 
 ### `Map.set`
 
@@ -221,9 +247,9 @@ Keys beginning with `prefix`, sorted (the map analogue of
 ### `Map.from-entries`
 
 Rebuild a map from a list of `[key, value]` pairs — the inverse of
-`entries`, so `(t entries) from-entries` reproduces `t`. The data
-round-trip for `encode` (see `Set.from-keys` for why there is no string
-`decode`).
+`entries`, so `(t entries) from-entries` reproduces `t`. The *data-level*
+round-trip, and the cross-variant path (`decode` only accepts its own
+variant's snapshots).
 
 | | |
 |--|--|
@@ -278,8 +304,10 @@ a literal.
 
 ## Behaviour shared by all variants
 
-- **Sorted output.** `keys`, `with-prefix`, `keys-with-prefix`, `values`,
-  and `entries` return keys in ascending order.
+- **Sorted output.** `keys`, `with-prefix`, `keys-with-prefix`,
+  `entries-with-prefix`, `values`, and `entries` return keys in ascending
+  order — by construction: children enumerate in character order, so the
+  collectors emit sorted output without a final sort.
 - **No false answers.** `has` is exact: there are no false positives or
   negatives (unlike a bloom filter).
 - **Equivalence.** For the same keys, all four variants expose the same
@@ -292,6 +320,7 @@ a literal.
 |-----------|--------|
 | `get`/`has` on an absent key | `none` / `false` (never an error) |
 | `delete` of an absent key | returns an equivalent trie (no-op) |
+| `decode` of another variant's (or a malformed) payload | raises a catchable error (`do […] error […]`) |
 | missing `end` after a call | dispatch error on the following word (add `end` or parens) |
 
 ## Complexity (n keys, key length L, alphabet σ)
@@ -303,4 +332,4 @@ a literal.
 | `delete` | `O(L)` |
 | `with-prefix` / `keys-with-prefix` | `O(L + m)` for `m` matching keys |
 | `longest-prefix` | `O(L)` |
-| `keys` / `values` / `entries` / `size` / `encode` | `O(total key length)` |
+| `keys` / `values` / `entries` / `size` / `encode` / `decode` | `O(total key length)` |
