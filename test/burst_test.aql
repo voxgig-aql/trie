@@ -178,6 +178,31 @@ def many fn [
 ] "burstset-from-data" Test.test end
 
 
+# --- encode/decode round-trip ----------------------------------------
+
+[
+  def m (fixture)
+  def m2 ((m BurstMap.encode) BurstMap.decode)
+  (m BurstMap.entries) (m2 BurstMap.entries) Assert.equal end
+  3 (m2 "card" BurstMap.get) Assert.equal end
+
+  # a set big enough to burst its root bucket also round-trips
+  def big (["a" "b" "c" "d" "e" "f" "g" "h" "i" "j"] BurstSet.from-keys)
+  def big2 ((big BurstSet.encode) BurstSet.decode)
+  (big BurstSet.keys) (big2 BurstSet.keys) Assert.equal end
+  10 (big2 BurstSet.size) Assert.equal end
+
+  # an empty tree survives the round-trip
+  def e2 (((BurstMap.make) BurstMap.encode) BurstMap.decode)
+  0 (e2 BurstMap.size) Assert.equal end
+
+  # decoding a payload of the wrong kind raises a catchable, named error
+  def msg (do [ ((big BurstSet.encode) BurstMap.decode) "no-raise" ]
+           error [ var [[e] convert String (e "message" get) ] ])
+  "BurstMap.decode: expected kind 'burstmap', got 'burstset'" msg Assert.equal end
+] "codec-roundtrip" Test.test end
+
+
 # --- summary -------------------------------------------------------
 
 "---" print

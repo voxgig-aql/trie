@@ -36,15 +36,6 @@ def trie-of fn [
   ]
 ]
 
-# Element-wise list equality (AQL `eq` on lists is identity, not deep).
-def list-eq fn [
-  [a:List b:List] [Boolean] [
-    if (((a size) (b size) eq) not) [false] [
-      true (iota (a size)) [ var [[i acc] acc ((a get (i)) (b get (i)) eq) and ] ] fold
-    ]
-  ]
-]
-
 def all-have-prefix fn [
   [p:String xs:List] [Boolean] [
     (xs each [ var [[x] x p starts-with ] ]) all end
@@ -126,7 +117,7 @@ def specs [
     [ var [[keys]
         def r (keys radix-of)
         def t (keys trie-of)
-        (r RadixSet.keys) (t TrieSet.keys) list-eq
+        (r RadixSet.keys) (t TrieSet.keys) deq
     ] ])
 
   # 8. longest-prefix over nested keys returns the longest stored prefix.

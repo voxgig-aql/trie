@@ -12,45 +12,48 @@
 #
 # --- representation -------------------------------------------------
 #
-# A nd is a plain Map with three fixed fields:
+# A node is a plain Map with three fixed fields (bindings that hold one are
+# named `nd`, because `node` itself is a reserved built-in word):
 #
 #   { end: Boolean,   # true if a key terminates here
 #     val: Any,       # the value bound to that key (TrieSet stores `true`)
-#     kids: List }    # children, as an association list of [char, nd]
+#     kids: Map }     # children, keyed by single character
 #
-# Children live in an *association list* — `[[ "c", <nd> ], … ]` — rather
-# than as dynamic map keys, because AQL maps cannot be built with computed
-# keys and `refine Object` instances cannot be enumerated. A list of pairs
-# is the one shape that is both rebuildable and walkable.
+# Children are a real computed-key Map: `{[ch]: node}` literals, copy-returning
+# `kids set (ch) child` updates, `kids get (ch)` lookups, and `StructUtil.items`
+# enumeration (which yields KEY-SORTED [char, node] pairs — so every traversal
+# below emits keys in lexicographic order by construction, and listing words
+# need no trailing sort). Earlier aql could not build or walk a map with
+# computed keys, which forced children into an association list; that gap was
+# closed upstream, and the list workaround is retired.
 #
 # Tries here are PERSISTENT (immutable): every `set`/`add`/`delete` returns a
 # new trie and leaves the input untouched. Nodes are rebuilt along the edited
-# path with `mk-node`; we never use `merge`, because AQL's `merge` is a deep,
-# index-wise merge that would fuse sibling child lists together.
+# path with `mk-node`, and `set` on a Map is copy-returning, so subtrees are
+# shared, never mutated. (We still never use StructUtil.merge to update a
+# node — it is a deep, index-wise merge.)
 #
 # Calling convention: like the rest of AQL, the receiver comes first and the
 # arguments follow — `t key val TrieMap.set`. Forward args have precedence, so
 # a call resolves at the next word or paren; `end`/parens are needed only to
 # separate a call from a following bare literal.
 #
-# Imported via `import "./trie.aql"`.
+# Imported via `import "./trie.aql"`. The only dependency is the standard
+# `aql:struct-util` module (map enumeration + jsonic parsing).
+
+import "aql:struct-util"
 
 
-# --- nd construction ----------------------------------------------
+# --- node construction ----------------------------------------------
 
-# A fresh, empty nd: no key ends here, no value, no children.
+# A fresh, empty node: no key ends here, no value, no children.
 def empty-node fn [
-  [] [Map] [ {end: false, val: none, kids: []} ]
+  [] [Map] [ {end: false, val: none, kids: {}} ]
 ]
 
-# Build a nd from its three fields. The flag parameter is named `fin` (not
+# Build a node from its three fields. The flag parameter is named `fin` (not
 # `end`) because `end` is the AQL call terminator and cannot be a binding name;
 # the stored *field* is still "end". Call: `kids val fin mk-node`.
-#
-# Values are stored directly. (Earlier aql evaluated `do {…}` map values as
-# code, so a String value naming a word — "if", "do" — was dispatched rather
-# than stored, and we boxed values to dodge that. Since aql `db828ec` fixed it,
-# the box is gone.)
 def mk-node fn [
   [fin:Any val:Any kids:Any] [Map] [
     do {end: [fin], val: [val], kids: [kids]}
@@ -60,36 +63,38 @@ def mk-node fn [
 
 # --- child access ---------------------------------------------------
 
-# The child nd reached by single character `ch`, or `none` if absent.
+# The child node reached by single character `ch`, or `none` if absent.
 # Call: `nd ch find-kid`.
 def find-kid fn [
-  [ch:String nd:Map] [Any] [
-    none (nd "kids" get) [
-      var [[pair acc] if ((pair get 0) ch eq) [pair get 1] [acc] ]
-    ] fold
-  ]
+  [ch:String nd:Map] [Any] [ (nd "kids" get) get (ch) ]
 ]
 
 # `nd` with the child under `ch` replaced by (or added as) `child`.
 # Call: `nd ch child put-kid`.
 def put-kid fn [
   [child:Map ch:String nd:Map] [Map] [
-    def kept ([] (nd "kids" get) [
-      var [[pair acc] if ((pair get 0) ch eq) [acc] [acc pair push] ]
-    ] fold)
-    def kids2 (kept [ch child] push)
-    kids2 (nd "val" get) (nd "end" get) mk-node
+    ((nd "kids" get) set (ch) child) (nd "val" get) (nd "end" get) mk-node
   ]
 ]
 
-# `nd` with the child under `ch` removed entirely. Call: `nd ch drop-kid`.
+# `nd` with the child under `ch` removed entirely. There is no key-removal
+# word for maps, so rebuild the children from their entries, skipping `ch`.
+# Call: `nd ch drop-kid`.
 def drop-kid fn [
   [ch:String nd:Map] [Map] [
-    def kept ([] (nd "kids" get) [
-      var [[pair acc] if ((pair get 0) ch eq) [acc] [acc pair push] ]
+    def kept ({} ((nd "kids" get) StructUtil.items) [
+      var [[pair acc]
+        if ((pair get 0) ch eq) [acc] [acc set ((pair get 0)) (pair get 1)]
+      ]
     ] fold)
     kept (nd "val" get) (nd "end" get) mk-node
   ]
+]
+
+# The children of `nd` as key-sorted [char, node] pairs — the one enumeration
+# every traversal walks. Call: `nd kid-items`.
+def kid-items fn [
+  [nd:Map] [List] [ (nd "kids" get) StructUtil.items ]
 ]
 
 
@@ -111,7 +116,7 @@ def trie-insert fn [
   ]
 ]
 
-# The nd reached by following `key` from `nd`, or `none` if the path
+# The node reached by following `key` from `nd`, or `none` if the path
 # does not exist. Call: `nd key node-at`.
 def node-at fn [
   [key:String nd:Map] [Any] [
@@ -127,7 +132,7 @@ def node-at fn [
 
 # --- core: delete ---------------------------------------------------
 
-# A nd carrying no value and no children is dead and gets pruned after a
+# A node carrying no value and no children is dead and gets pruned after a
 # delete, so the tree never accumulates empty paths. Call: `nd dead-node`.
 def dead-node fn [
   [nd:Map] [Boolean] [
@@ -155,13 +160,17 @@ def trie-delete fn [
 
 
 # --- traversal ------------------------------------------------------
+#
+# Children enumerate in character order (`kid-items`), and a node's own key
+# is emitted before its children's, so every collector below produces keys
+# already in lexicographic order.
 
 # Append every terminating key at or below `nd` (prefixed by `pfx`) to
-# `acc`, in pre-order. Call: `acc pfx nd collect-keys`.
+# `acc`, in sorted order. Call: `acc pfx nd collect-keys`.
 def collect-keys fn [
   [nd:Map pfx:String acc:List] [List] [
     def acc2 (if (nd "end" get) [acc pfx push] [acc])
-    acc2 (nd "kids" get) [
+    acc2 (nd kid-items) [
       var [[pair a]
         def newpfx `${pfx}${(pair get 0)}`
         a newpfx (pair get 1) collect-keys
@@ -174,7 +183,7 @@ def collect-keys fn [
 def collect-entries fn [
   [nd:Map pfx:String acc:List] [List] [
     def acc2 (if (nd "end" get) [acc [pfx (nd "val" get)] push] [acc])
-    acc2 (nd "kids" get) [
+    acc2 (nd kid-items) [
       var [[pair a]
         def newpfx `${pfx}${(pair get 0)}`
         a newpfx (pair get 1) collect-entries
@@ -204,7 +213,7 @@ def longest fn [
 def count-keys fn [
   [nd:Map] [Integer] [
     def here (if (nd "end" get) [1] [0])
-    here (nd "kids" get) [
+    here (nd kid-items) [
       var [[pair acc] acc ((pair get 1) count-keys) add ]
     ] fold
   ]
@@ -214,7 +223,7 @@ def count-keys fn [
 # Call: `nd node-height`.
 def node-height fn [
   [nd:Map] [Integer] [
-    0 (nd "kids" get) [
+    0 (nd kid-items) [
       var [[pair acc]
         def h ((pair get 1) node-height 1 add)
         if (h gt acc) [h] [acc]
@@ -225,21 +234,44 @@ def node-height fn [
 
 
 # --- serialisation --------------------------------------------------
+#
+# `encode` interpolates a payload map to its jsonic text; `decode` parses
+# that text back (`StructUtil.parse`) and rebuilds the trie from the data.
+# A payload of the wrong kind raises a catchable error.
 
-# A jsonic-style one-way snapshot: kind, key count, and the entries.
 def encode-map fn [
   [nd:Map] [String] [
     def es ([] "" nd collect-entries)
     def payload (do {kind: ["triemap"], size: [nd count-keys], entries: [es]})
-    `${payload}`
+    payload StructUtil.jsonify
   ]
 ]
 
 def encode-set fn [
   [nd:Map] [String] [
-    def ks ([] "" nd collect-keys sort)
+    def ks ([] "" nd collect-keys)
     def payload (do {kind: ["trieset"], size: [nd count-keys], keys: [ks]})
-    `${payload}`
+    payload StructUtil.jsonify
+  ]
+]
+
+def decode-map fn [
+  [s:String] [Map] [
+    def p (s StructUtil.parse)
+    if ((p "kind" get) "triemap" eq) [ (p "entries" get) build-from-entries ] [
+      def msg `TrieMap.decode: expected kind 'triemap', got '${(p "kind" get)}'`
+      raise msg
+    ]
+  ]
+]
+
+def decode-set fn [
+  [s:String] [Map] [
+    def p (s StructUtil.parse)
+    if ((p "kind" get) "trieset" eq) [ (p "keys" get) build-from-keys ] [
+      def msg `TrieSet.decode: expected kind 'trieset', got '${(p "kind" get)}'`
+      raise msg
+    ]
   ]
 ]
 
@@ -281,10 +313,11 @@ def build-row fn [
 ]
 
 # Collect keys within distance `k`, descending children and updating rows.
-# Call: `acc prefix prow k query nd fuzzy-go`.
+# A key is emitted before its subtree is descended and children come in
+# character order, so the result is sorted. Call: `acc prefix prow k query nd fuzzy-go`.
 def fuzzy-go fn [
   [nd:Map query:String k:Integer prow:List prefix:String acc:List] [List] [
-    acc (nd "kids" get) [
+    acc (nd kid-items) [
       var [[pair a]
         def c     (pair get 0)
         def child (pair get 1)
@@ -304,7 +337,7 @@ def trie-within fn [
   [k:Integer query:String nd:Map] [List] [
     def row0 (iota ((query size) 1 add))
     def seed (if ((nd "end" get) and ((query size) lte k)) [ [] "" push ] [[]])
-    (seed "" row0 k query nd fuzzy-go) sort
+    seed "" row0 k query nd fuzzy-go
   ]
 ]
 
@@ -313,7 +346,8 @@ def trie-within fn [
 #
 # Match keys against a pattern where `?` is any single character, `*` is
 # any run of characters (including none), and every other character is a
-# literal.
+# literal. The `*` arm emits this node's matches before each child's, so
+# emission order is NOT lexicographic and trie-match sorts at the end.
 
 def match-go fn [
   [nd:Map pattern:String prefix:String acc:List] [List] [
@@ -323,7 +357,7 @@ def match-go fn [
       def p0    (pattern slice 0 1)
       def prest (pattern slice 1 (pattern size))
       if (p0 "?" eq) [
-        acc (nd "kids" get) [
+        acc (nd kid-items) [
           var [[pair a]
             def np (prefix (pair get 0) add)
             (a np prest (pair get 1) match-go)
@@ -332,7 +366,7 @@ def match-go fn [
       ] [
         if (p0 "*" eq) [
           def acc0 (acc prefix prest nd match-go)
-          acc0 (nd "kids" get) [
+          acc0 (nd kid-items) [
             var [[pair a]
               def np (prefix (pair get 0) add)
               (a np pattern (pair get 1) match-go)
@@ -404,14 +438,9 @@ def map-delete fn [
   [key:String t:Map] [Map] [ t key trie-delete ]
 ]
 
-def map-keys fn [ [t:Map] [List] [ [] "" t collect-keys sort ] ]
+def map-keys fn [ [t:Map] [List] [ [] "" t collect-keys ] ]
 
-def map-entries fn [
-  [t:Map] [List] [
-    def ks (([] "" t collect-keys) sort)
-    ks each [ var [[k] def v (t k map-get) [] k push v push ] ]
-  ]
-]
+def map-entries fn [ [t:Map] [List] [ [] "" t collect-entries ] ]
 
 # Values in key order. `entries` is already sorted [key, value] pairs, so we
 # pluck the value column with the receiverless lens `$.1` (a Reach value that
@@ -428,7 +457,7 @@ def map-height fn [ [t:Map] [Integer] [ t node-height ] ]
 def map-keys-with-prefix fn [
   [prefix:String t:Map] [List] [
     def n (t prefix node-at)
-    if (n eq none) [[]] [ [] prefix n collect-keys sort ]
+    if (n eq none) [[]] [ [] prefix n collect-keys ]
   ]
 ]
 
@@ -454,6 +483,9 @@ def map-from-entries fn [ [entries:List] [Map] [ entries build-from-entries ] ]
 
 def map-encode fn [ [t:Map] [String] [ t encode-map ] ]
 
+# Rebuild a map from an `encode` string (raises on a non-triemap payload).
+def map-decode fn [ [s:String] [Map] [ s decode-map ] ]
+
 
 # --- TrieSet surface ------------------------------------------------
 #
@@ -476,7 +508,7 @@ def set-delete fn [
   [key:String t:Map] [Map] [ t key trie-delete ]
 ]
 
-def set-keys fn [ [t:Map] [List] [ [] "" t collect-keys sort ] ]
+def set-keys fn [ [t:Map] [List] [ [] "" t collect-keys ] ]
 
 def set-size fn [ [t:Map] [Integer] [ t count-keys ] ]
 
@@ -485,7 +517,7 @@ def set-height fn [ [t:Map] [Integer] [ t node-height ] ]
 def set-with-prefix fn [
   [prefix:String t:Map] [List] [
     def n (t prefix node-at)
-    if (n eq none) [[]] [ [] prefix n collect-keys sort ]
+    if (n eq none) [[]] [ [] prefix n collect-keys ]
   ]
 ]
 
@@ -503,6 +535,9 @@ def set-match fn [ [pattern:String t:Map] [List] [ t pattern trie-match ] ]
 def set-from-keys fn [ [keys:List] [Map] [ keys build-from-keys ] ]
 
 def set-encode fn [ [t:Map] [String] [ t encode-set ] ]
+
+# Rebuild a set from an `encode` string (raises on a non-trieset payload).
+def set-decode fn [ [s:String] [Map] [ s decode-set ] ]
 
 
 # --- namespaces -----------------------------------------------------
@@ -525,6 +560,7 @@ export "TrieMap" {
   match:               map-match/r
   from-entries:        map-from-entries/r
   encode:              map-encode/r
+  decode:              map-decode/r
 }
 
 export "TrieSet" {
@@ -541,4 +577,5 @@ export "TrieSet" {
   match:          set-match/r
   from-keys:      set-from-keys/r
   encode:         set-encode/r
+  decode:         set-decode/r
 }

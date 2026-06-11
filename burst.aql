@@ -6,7 +6,7 @@
 #   BurstSet — a set of Strings (membership), over the same engine.
 #
 # A burst trie keeps keys in small *buckets* until a bucket grows past a
-# threshold, at which point it *bursts* into a trie nd whose children are
+# threshold, at which point it *bursts* into a trie node whose children are
 # fresh sub-buckets keyed by the next character. The shallow trie spine
 # stays small while most keys live in flat, cache-friendly buckets — the
 # idea a HAT-trie exploits for speed. (A true bitmap/array-mapped trie wants
@@ -15,20 +15,31 @@
 #
 # --- representation -------------------------------------------------
 #
-# A nd is one of two tagged Maps:
+# A node is one of two tagged Maps (bindings that hold one are named `nd`,
+# because `node` itself is a reserved built-in word):
 #
 #   bucket: { kind: "bucket", items: [[suffix, value], …] }
-#   trie:   { kind: "trie", end: Boolean, val: Any, kids: [[char, nd], …] }
+#   trie:   { kind: "trie", end: Boolean, val: Any, kids: Map }
 #
 # A bucket holds the *remaining* suffixes of keys routed to it, paired with
-# their values. A trie nd routes by one character and may itself end
-# a key. The empty tree is an empty bucket, so a tree is always a Map.
+# their values. Buckets stay flat, UNSORTED association lists — scan-and-
+# rebuild is the whole point of the variant — and collectors sort a bucket's
+# few items only at emission time. The spine's children are a computed-key
+# Map (character → node): `kids get (ch)` looks up, copy-returning
+# `kids set (ch) child` updates, and `StructUtil.items` enumerates in
+# character order, so traversals emit keys already sorted.
+#
+# A trie node routes by one character and may itself end a key. The empty
+# tree is an empty bucket, so a tree is always a Map.
 #
 # Trees are PERSISTENT: mutators return a new tree. Paths are assembled with
 # core `add` (string concatenation). Membership is structural (`b-member`), so
 # a stored `none` value stays distinct from an absent key.
 #
-# Imported via `import "./burst.aql"`.
+# Imported via `import "./burst.aql"`. The only dependency is the standard
+# `aql:struct-util` module (map enumeration + jsonic parsing).
+
+import "aql:struct-util"
 
 
 # --- constants ------------------------------------------------------
@@ -39,7 +50,7 @@
 def burst-limit fn [ [] [Integer] [8] ]
 
 
-# --- nd construction ----------------------------------------------
+# --- node construction ----------------------------------------------
 
 def mk-bucket fn [ [items:Any] [Map] [ do {kind: ["bucket"], items: [items]} ] ]
 
@@ -52,7 +63,7 @@ def mk-trienode fn [
 
 def is-bucket fn [ [nd:Map] [Boolean] [ (nd "kind" get) "bucket" eq ] ]
 
-# A nd holding nothing: an empty bucket, or a trie nd with no key and no
+# A node holding nothing: an empty bucket, or a trie node with no key and no
 # children. Such nodes are pruned after a delete.
 def is-empty fn [
   [nd:Map] [Boolean] [
@@ -77,7 +88,7 @@ def bucket-find fn [
 # Call: `items key val bucket-set`.
 def bucket-set fn [
   [val:Any key:String items:List] [List] [
-    def kept ([] items [ var [[pair acc] if ((pair get 0) key eq) [acc] [acc pair push] ] ] fold)
+    def kept (items filter [ var [[pair] ((pair get 0) key eq) not ] ])
     kept [key val] push
   ]
 ]
@@ -85,30 +96,45 @@ def bucket-set fn [
 # Items with `key` removed. Call: `items key bucket-del`.
 def bucket-del fn [
   [key:String items:List] [List] [
-    [] items [ var [[pair acc] if ((pair get 0) key eq) [acc] [acc pair push] ] ] fold
+    items filter [ var [[pair] ((pair get 0) key eq) not ] ]
   ]
 ]
 
-# The child nd under char `ch`, or `none`. Call: `nd ch find-kid`.
+# A bucket's items sorted by suffix (suffixes are distinct, so the pair's
+# first column decides). Collectors emit through this so their output stays
+# lexicographic without a global sort. Call: `nd sorted-items`.
+def sorted-items fn [
+  [nd:Map] [List] [ (nd "items" get) sort ]
+]
+
+# The spine children of `nd` as character-sorted [char, node] pairs.
+# Call: `nd kid-items`.
+def kid-items fn [
+  [nd:Map] [List] [ (nd "kids" get) StructUtil.items ]
+]
+
+# The child node under char `ch`, or `none`. Call: `nd ch find-kid`.
 def find-kid fn [
-  [ch:String nd:Map] [Any] [
-    none (nd "kids" get) [ var [[pair acc] if ((pair get 0) ch eq) [pair get 1] [acc] ] ] fold
-  ]
+  [ch:String nd:Map] [Any] [ (nd "kids" get) get (ch) ]
 ]
 
 # `nd` with the child under `ch` replaced by `child`. Call: `nd ch child put-kid`.
 def put-kid fn [
   [child:Map ch:String nd:Map] [Map] [
-    def kept ([] (nd "kids" get) [ var [[pair acc] if ((pair get 0) ch eq) [acc] [acc pair push] ] ] fold)
-    def kids2 (kept [ch child] push)
-    kids2 (nd "val" get) (nd "end" get) mk-trienode
+    ((nd "kids" get) set (ch) child) (nd "val" get) (nd "end" get) mk-trienode
   ]
 ]
 
-# `nd` with the child under `ch` removed. Call: `nd ch drop-kid`.
+# `nd` with the child under `ch` removed. There is no key-removal word for
+# maps, so rebuild the children from their entries, skipping `ch`.
+# Call: `nd ch drop-kid`.
 def drop-kid fn [
   [ch:String nd:Map] [Map] [
-    def kept ([] (nd "kids" get) [ var [[pair acc] if ((pair get 0) ch eq) [acc] [acc pair push] ] ] fold)
+    def kept ({} ((nd "kids" get) StructUtil.items) [
+      var [[pair acc]
+        if ((pair get 0) ch eq) [acc] [acc set ((pair get 0)) (pair get 1)]
+      ]
+    ] fold)
     kept (nd "val" get) (nd "end" get) mk-trienode
   ]
 ]
@@ -117,7 +143,7 @@ def drop-kid fn [
 # --- core: insert + burst -------------------------------------------
 
 # Insert `key` → `val` into `nd`. A bucket that overflows
-# bursts into a trie nd. Call: `nd key val b-insert`.
+# bursts into a trie node. Call: `nd key val b-insert`.
 def b-insert fn [
   [val:Any key:String nd:Map] [Map] [
     if (nd is-bucket) [
@@ -137,11 +163,11 @@ def b-insert fn [
   ]
 ]
 
-# Burst a bucket's items into a trie nd by re-inserting each into an empty
-# trie nd (which routes them into fresh sub-buckets). Call: `items b-burst`.
+# Burst a bucket's items into a trie node by re-inserting each into an empty
+# trie node (which routes them into fresh sub-buckets). Call: `items b-burst`.
 def b-burst fn [
   [items:List] [Map] [
-    def start ([] [] false mk-trienode)
+    def start ({} none false mk-trienode)
     start items [ var [[pair acc] (acc (pair get 0) (pair get 1) b-insert) ] ] fold
   ]
 ]
@@ -189,6 +215,10 @@ def b-member fn [
 
 
 # --- traversal ------------------------------------------------------
+#
+# Spine children enumerate in character order (`kid-items`) and buckets emit
+# their few items suffix-sorted (`sorted-items`), so the collectors below
+# produce keys already in lexicographic order.
 
 # True when `s` begins with `pfx`. Call: `s pfx starts-with`.
 def starts-with fn [
@@ -198,30 +228,50 @@ def starts-with fn [
   ]
 ]
 
-# Append every key at or below `nd` (prefixed by `prefix`) to `acc`.
-# Call: `acc prefix nd collect-b`.
+# Append every key at or below `nd` (prefixed by `prefix`) to `acc`,
+# in sorted order. Call: `acc prefix nd collect-b`.
 def collect-b fn [
   [nd:Map prefix:String acc:List] [List] [
     if (nd is-bucket) [
-      acc (nd "items" get) [
+      acc (nd sorted-items) [
         var [[pair a] def np (prefix (pair get 0) add) a np push ]
       ] fold
     ] [
       def acc1 (if (nd "end" get) [acc prefix push] [acc])
-      acc1 (nd "kids" get) [
+      acc1 (nd kid-items) [
         var [[pair a] def np (prefix (pair get 0) add) (a np (pair get 1) collect-b) ]
       ] fold
     ]
   ]
 ]
 
-# Keys at or below `prefix`. `consumed` is the path already walked.
+# As `collect-b`, but appends [key, value] pairs. Call: `acc prefix nd collect-eb`.
+def collect-eb fn [
+  [nd:Map prefix:String acc:List] [List] [
+    if (nd is-bucket) [
+      acc (nd sorted-items) [
+        var [[pair a]
+          def np (prefix (pair get 0) add)
+          def v (pair get 1)
+          a [np v] push
+        ]
+      ] fold
+    ] [
+      def acc1 (if (nd "end" get) [acc [prefix (nd "val" get)] push] [acc])
+      acc1 (nd kid-items) [
+        var [[pair a] def np (prefix (pair get 0) add) (a np (pair get 1) collect-eb) ]
+      ] fold
+    ]
+  ]
+]
+
+# Keys at or below `prefix`, sorted. `consumed` is the path already walked.
 # Call: `acc consumed prefix nd navigate-prefix`.
 def navigate-prefix fn [
   [nd:Map prefix:String consumed:String acc:List] [List] [
     if ((prefix size) eq 0) [ acc consumed nd collect-b ] [
       if (nd is-bucket) [
-        acc (nd "items" get) [
+        acc (nd sorted-items) [
           var [[pair a]
             def suf (pair get 0)
             if (suf prefix starts-with) [ def np (consumed suf add) a np push ] [a]
@@ -275,7 +325,7 @@ def count-b fn [
   [nd:Map] [Integer] [
     if (nd is-bucket) [ (nd "items" get) size ] [
       def here (if (nd "end" get) [1] [0])
-      here (nd "kids" get) [ var [[pair acc] acc ((pair get 1) count-b) add ] ] fold
+      here (nd kid-items) [ var [[pair acc] acc ((pair get 1) count-b) add ] ] fold
     ]
   ]
 ]
@@ -284,7 +334,7 @@ def count-b fn [
 def height-b fn [
   [nd:Map] [Integer] [
     if (nd is-bucket) [1] [
-      def kmax (0 (nd "kids" get) [
+      def kmax (0 (nd kid-items) [
         var [[pair acc] def h ((pair get 1) height-b) if (h gt acc) [h] [acc] ]
       ] fold)
       kmax 1 add
@@ -300,7 +350,7 @@ def height-b fn [
 def b-delete fn [
   [key:String nd:Map] [Map] [
     if (nd is-bucket) [ ((nd "items" get) key bucket-del) mk-bucket ] [
-      if ((key size) eq 0) [ (nd "kids" get) [] false mk-trienode ] [
+      if ((key size) eq 0) [ (nd "kids" get) none false mk-trienode ] [
         def ch (key slice 0 1)
         def rest (key slice 1 (key size))
         def child (nd ch find-kid)
@@ -326,20 +376,14 @@ def map-has fn [ [key:String t:Map] [Boolean] [ t key b-member ] ]
 
 def map-delete fn [ [key:String t:Map] [Map] [ t key b-delete ] ]
 
-def map-keys fn [ [t:Map] [List] [ ([] "" t collect-b) sort ] ]
+def map-keys fn [ [t:Map] [List] [ [] "" t collect-b ] ]
 
+def map-entries fn [ [t:Map] [List] [ [] "" t collect-eb ] ]
+
+# Values in key order: entries is already sorted [key, value] pairs, so
+# pluck the value column with the `$.1` lens — no per-key lookup.
 def map-values fn [
-  [t:Map] [List] [
-    def ks (([] "" t collect-b) sort)
-    ks each [ var [[k] (t k map-get) ] ]
-  ]
-]
-
-def map-entries fn [
-  [t:Map] [List] [
-    def ks (([] "" t collect-b) sort)
-    ks each [ var [[k] def v (t k map-get) [] k push v push ] ]
-  ]
+  [t:Map] [List] [ (t map-entries) each $.1 ]
 ]
 
 def map-size fn [ [t:Map] [Integer] [ t count-b ] ]
@@ -347,12 +391,12 @@ def map-size fn [ [t:Map] [Integer] [ t count-b ] ]
 def map-height fn [ [t:Map] [Integer] [ t height-b ] ]
 
 def map-keys-with-prefix fn [
-  [prefix:String t:Map] [List] [ ([] "" prefix t navigate-prefix) sort ]
+  [prefix:String t:Map] [List] [ [] "" prefix t navigate-prefix ]
 ]
 
 def map-entries-with-prefix fn [
   [prefix:String t:Map] [List] [
-    def ks (([] "" prefix t navigate-prefix) sort)
+    def ks ([] "" prefix t navigate-prefix)
     ks each [ var [[k] def v (t k map-get) [] k push v push ] ]
   ]
 ]
@@ -368,10 +412,20 @@ def map-from-entries fn [
 
 def map-encode fn [
   [t:Map] [String] [
-    def ks (([] "" t collect-b) sort)
-    def es (ks each [ var [[k] def v (t k map-get) [] k push v push ] ])
+    def es ([] "" t collect-eb)
     def payload (do {kind: ["burstmap"], size: [t count-b], entries: [es]})
-    `${payload}`
+    payload StructUtil.jsonify
+  ]
+]
+
+# Rebuild a map from an `encode` string (raises on a non-burstmap payload).
+def map-decode fn [
+  [s:String] [Map] [
+    def p (s StructUtil.parse)
+    if ((p "kind" get) "burstmap" eq) [ (p "entries" get) map-from-entries ] [
+      def msg `BurstMap.decode: expected kind 'burstmap', got '${(p "kind" get)}'`
+      raise msg
+    ]
   ]
 ]
 
@@ -386,14 +440,14 @@ def set-has fn [ [key:String t:Map] [Boolean] [ t key b-member ] ]
 
 def set-delete fn [ [key:String t:Map] [Map] [ t key b-delete ] ]
 
-def set-keys fn [ [t:Map] [List] [ ([] "" t collect-b) sort ] ]
+def set-keys fn [ [t:Map] [List] [ [] "" t collect-b ] ]
 
 def set-size fn [ [t:Map] [Integer] [ t count-b ] ]
 
 def set-height fn [ [t:Map] [Integer] [ t height-b ] ]
 
 def set-with-prefix fn [
-  [prefix:String t:Map] [List] [ ([] "" prefix t navigate-prefix) sort ]
+  [prefix:String t:Map] [List] [ [] "" prefix t navigate-prefix ]
 ]
 
 def set-longest-prefix fn [ [key:String t:Map] [Any] [ none "" key t longest-b ] ]
@@ -407,9 +461,20 @@ def set-from-keys fn [
 
 def set-encode fn [
   [t:Map] [String] [
-    def ks (([] "" t collect-b) sort)
+    def ks ([] "" t collect-b)
     def payload (do {kind: ["burstset"], size: [t count-b], keys: [ks]})
-    `${payload}`
+    payload StructUtil.jsonify
+  ]
+]
+
+# Rebuild a set from an `encode` string (raises on a non-burstset payload).
+def set-decode fn [
+  [s:String] [Map] [
+    def p (s StructUtil.parse)
+    if ((p "kind" get) "burstset" eq) [ (p "keys" get) set-from-keys ] [
+      def msg `BurstSet.decode: expected kind 'burstset', got '${(p "kind" get)}'`
+      raise msg
+    ]
   ]
 ]
 
@@ -432,6 +497,7 @@ export "BurstMap" {
   longest-prefix:      map-longest-prefix/r
   from-entries:        map-from-entries/r
   encode:              map-encode/r
+  decode:              map-decode/r
 }
 
 export "BurstSet" {
@@ -446,4 +512,5 @@ export "BurstSet" {
   longest-prefix: set-longest-prefix/r
   from-keys:      set-from-keys/r
   encode:         set-encode/r
+  decode:         set-decode/r
 }

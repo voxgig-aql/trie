@@ -47,15 +47,6 @@ def all-have-prefix fn [
   ]
 ]
 
-# Element-wise list equality (AQL's `eq` on lists is identity, not deep).
-def list-eq fn [
-  [a:List b:List] [Boolean] [
-    if (((a size) (b size) eq) not) [false] [
-      true (iota (a size)) [ var [[i acc] acc ((a get (i)) (b get (i)) eq) and ] ] fold
-    ]
-  ]
-]
-
 # Are all members of `xs` present in set `s`? Call: `xs s all-members`.
 def all-members fn [
   [s:Map xs:List] [Boolean] [
@@ -159,7 +150,7 @@ def specs [
         def s (keys set-of)
         def q (keys get 0)
         def z (s q 0 TrieSet.within)
-        z ([] q push) list-eq
+        z ([] q push) deq
     ] ])
 
   # 10. wildcard soundness: every key matching a pattern is a real member.
@@ -178,7 +169,7 @@ def specs [
     [ var [[keys]
         def viaadd  ((keys set-of) TrieSet.keys)
         def viafrom ((keys TrieSet.from-keys) TrieSet.keys)
-        viaadd viafrom list-eq
+        viaadd viafrom deq
     ] ])
 
 ]

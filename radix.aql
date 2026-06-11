@@ -7,45 +7,51 @@
 #
 # A radix tree is a trie in which every chain of single-child nodes is
 # compressed into one edge carrying a multi-character *label*. Where a plain
-# trie spends one nd per character, a radix tree spends one nd per
+# trie spends one node per character, a radix tree spends one node per
 # branch point, so sparse key sets (long keys, little shared structure) use
 # far less memory. The cost is more intricate updates: inserting a key that
 # diverges in the middle of an edge must *split* that edge, and deleting a
-# key may *merge* a nd back into its only remaining child.
+# key may *merge* a node back into its only remaining child.
 #
 # --- representation -------------------------------------------------
 #
-# A nd is a plain Map with three fixed fields:
+# A node is a plain Map with three fixed fields (bindings that hold one are
+# named `nd`, because `node` itself is a reserved built-in word):
 #
 #   { end: Boolean,   # true if a key terminates here
 #     val: Any,       # the value bound to that key (RadixSet stores `true`)
-#     kids: List }    # edges, as an association list of [label, nd]
+#     kids: Map }     # edges: first character → [label, child] pair
 #
-# Edge labels are non-empty Strings. Invariant: the labels of a nd's edges
-# all start with distinct characters, so a single first character selects at
-# most one edge. Paths are reassembled by concatenating labels.
+# Edge labels are non-empty Strings. Invariant: the labels of a node's edges
+# all start with distinct characters, so the kids map is keyed by that first
+# character and a lookup selects at most one edge in O(1). The pair keeps the
+# full label alongside the child; paths are reassembled by concatenating
+# labels. `StructUtil.items` enumerates the map sorted by first character —
+# which, with distinct first characters, is sorted by label — so traversals
+# emit keys in lexicographic order by construction.
 #
 # Like the standard trie, radix trees here are PERSISTENT: mutators return a
 # new tree and rebuild nodes along the edited path. Paths are assembled with
-# core `add`, and nodes rebuilt with an explicit literal constructor — never
-# `merge`, which deep-merges and would fuse sibling edge lists.
+# core `add`, edges updated with copy-returning Map `set`, and nodes rebuilt
+# with an explicit constructor — never StructUtil.merge, which deep-merges.
 #
-# Imported via `import "./radix.aql"`.
+# Imported via `import "./radix.aql"`. The only dependency is the standard
+# `aql:struct-util` module (map enumeration + jsonic parsing).
+
+import "aql:struct-util"
 
 
-# --- nd construction ----------------------------------------------
+# --- node construction ----------------------------------------------
 
-def empty-node fn [ [] [Map] [ {end: false, val: none, kids: []} ] ]
+def empty-node fn [ [] [Map] [ {end: false, val: none, kids: {}} ] ]
 
-# Build a nd from its fields. `fin` (not `end`) because `end` is the AQL call
-# terminator and cannot be a binding name. Values are stored directly (aql
-# `db828ec` no longer evaluates `do {…}` map values, so the old box is gone).
-# Call: `kids val fin mk-node`.
+# Build a node from its fields. `fin` (not `end`) because `end` is the AQL
+# call terminator and cannot be a binding name. Call: `kids val fin mk-node`.
 def mk-node fn [
   [fin:Any val:Any kids:Any] [Map] [ do {end: [fin], val: [val], kids: [kids]} ]
 ]
 
-# A nd with no value and no edges is dead and gets pruned after a delete.
+# A node with no value and no edges is dead and gets pruned after a delete.
 def dead-node fn [
   [nd:Map] [Boolean] [
     ((nd "end" get) not) and (((nd "kids" get) size) eq 0)
@@ -74,42 +80,49 @@ def common-len fn [
   ]
 ]
 
+# The edges of `nd` as [label, child] pairs, sorted by label. items yields
+# [first-char, [label, child]]; the `$.1` lens plucks the pair column.
+# Call: `nd edge-items`.
+def edge-items fn [
+  [nd:Map] [List] [ ((nd "kids" get) StructUtil.items) each $.1 ]
+]
+
 # The edge pair [label, child] whose label shares `key`'s first character,
 # or `none`. Call: `nd key find-edge`.
 def find-edge fn [
-  [key:String nd:Map] [Any] [
-    def fc (key slice 0 1)
-    none (nd "kids" get) [
-      var [[pair acc] if (((pair get 0) slice 0 1) fc eq) [pair] [acc] ]
-    ] fold
-  ]
+  [key:String nd:Map] [Any] [ (nd "kids" get) get ((key slice 0 1)) ]
 ]
 
 # `nd` with the edge `oldlabel` replaced by edge `newlabel` → `child`.
+# Precondition (held by every caller): `oldlabel` and `newlabel` start with
+# the same character, so this is a single copy-returning `set` on that slot.
 # Call: `nd oldlabel newlabel child set-edge`.
 def set-edge fn [
   [child:Map newlabel:String oldlabel:String nd:Map] [Map] [
-    def kept ([] (nd "kids" get) [
-      var [[pair acc] if ((pair get 0) oldlabel eq) [acc] [acc pair push] ]
-    ] fold)
-    def kids2 (kept [newlabel child] push)
+    def kids2 ((nd "kids" get) set ((newlabel slice 0 1)) [newlabel child])
     kids2 (nd "val" get) (nd "end" get) mk-node
   ]
 ]
 
-# `nd` with a new edge `label` → `child` appended. Call: `nd label child add-edge`.
+# `nd` with a new edge `label` → `child` added (no edge shares its first
+# character). Call: `nd label child add-edge`.
 def add-edge fn [
   [child:Map label:String nd:Map] [Map] [
-    def kids2 ((nd "kids" get) [label child] push)
+    def kids2 ((nd "kids" get) set ((label slice 0 1)) [label child])
     kids2 (nd "val" get) (nd "end" get) mk-node
   ]
 ]
 
-# `nd` with the edge `label` removed. Call: `nd label drop-edge`.
+# `nd` with the edge `label` removed. There is no key-removal word for maps,
+# so rebuild the edges from their entries, skipping that first character.
+# Call: `nd label drop-edge`.
 def drop-edge fn [
   [label:String nd:Map] [Map] [
-    def kept ([] (nd "kids" get) [
-      var [[pair acc] if ((pair get 0) label eq) [acc] [acc pair push] ]
+    def fc (label slice 0 1)
+    def kept ({} ((nd "kids" get) StructUtil.items) [
+      var [[el acc]
+        if ((el get 0) fc eq) [acc] [acc set ((el get 0)) (el get 1)]
+      ]
     ] fold)
     kept (nd "val" get) (nd "end" get) mk-node
   ]
@@ -125,7 +138,7 @@ def radix-insert fn [
       def edge (nd key find-edge)
       if (edge eq none) [
         # nothing shares a first character: add the whole key as one edge
-        def term ([] val true mk-node)
+        def term ({} val true mk-node)
         nd key term add-edge
       ] [
         def lab (edge get 0)
@@ -141,10 +154,11 @@ def radix-insert fn [
           def pre   (key slice 0 p)
           def lrest (lab slice p (lab size))
           def krest (key slice p (key size))
-          def mid0  ([[lrest c]] none false mk-node)
+          def midkids ({} set ((lrest slice 0 1)) [lrest c])
+          def mid0  (midkids none false mk-node)
           def mid (if ((krest size) eq 0)
             [ (mid0 "kids" get) val true mk-node ]
-            [ def kterm ([] val true mk-node) mid0 krest kterm add-edge ])
+            [ def kterm ({} val true mk-node) mid0 krest kterm add-edge ])
           nd lab pre mid set-edge
         ]
       ]
@@ -155,7 +169,7 @@ def radix-insert fn [
 
 # --- core: locate ---------------------------------------------------
 
-# The nd exactly at `key`, or `none` (key must consume whole labels).
+# The node exactly at `key`, or `none` (key must consume whole labels).
 # Call: `nd key radix-at`.
 def radix-at fn [
   [key:String nd:Map] [Any] [
@@ -181,16 +195,33 @@ def radix-get fn [
 
 
 # --- traversal ------------------------------------------------------
+#
+# Edges enumerate sorted by label (`edge-items`), and a node's own key is
+# emitted before its children's, so the collectors below produce keys
+# already in lexicographic order.
 
 # Append every terminating key at or below `nd` (prefixed by `pfx`) to
-# `acc`. Call: `acc pfx nd collect-r`.
+# `acc`, in sorted order. Call: `acc pfx nd collect-r`.
 def collect-r fn [
   [nd:Map pfx:String acc:List] [List] [
     def acc2 (if (nd "end" get) [acc pfx push] [acc])
-    acc2 (nd "kids" get) [
+    acc2 (nd edge-items) [
       var [[pair a]
         def np (pfx (pair get 0) add)
         (a np (pair get 1) collect-r)
+      ]
+    ] fold
+  ]
+]
+
+# As `collect-r`, but appends [key, value] pairs. Call: `acc pfx nd collect-er`.
+def collect-er fn [
+  [nd:Map pfx:String acc:List] [List] [
+    def acc2 (if (nd "end" get) [acc [pfx (nd "val" get)] push] [acc])
+    acc2 (nd edge-items) [
+      var [[pair a]
+        def np (pfx (pair get 0) add)
+        (a np (pair get 1) collect-er)
       ]
     ] fold
   ]
@@ -249,7 +280,7 @@ def longest-r fn [
 def count-keys fn [
   [nd:Map] [Integer] [
     def here (if (nd "end" get) [1] [0])
-    here (nd "kids" get) [
+    here (nd edge-items) [
       var [[pair acc] acc ((pair get 1) count-keys) add ]
     ] fold
   ]
@@ -259,7 +290,7 @@ def count-keys fn [
 # Call: `nd node-height`.
 def node-height fn [
   [nd:Map] [Integer] [
-    0 (nd "kids" get) [
+    0 (nd edge-items) [
       var [[pair acc]
         def h ((pair get 1) node-height 1 add)
         if (h gt acc) [h] [acc]
@@ -271,7 +302,7 @@ def node-height fn [
 
 # --- core: delete ---------------------------------------------------
 
-# Remove `key` beneath `nd`, pruning dead branches and merging a nd that
+# Remove `key` beneath `nd`, pruning dead branches and merging a node that
 # is left non-terminal with a single child. Call: `nd key radix-delete`.
 def radix-delete fn [
   [key:String nd:Map] [Map] [
@@ -284,7 +315,7 @@ def radix-delete fn [
         if (p (lab size) eq) [
           def newc (c (key slice p (key size)) radix-delete)
           if (newc dead-node) [ nd lab drop-edge ] [
-            def gk (newc "kids" get)
+            def gk (newc edge-items)
             if (((newc "end" get) not) and ((gk size) eq 1)) [
               def gpair  (gk get 0)
               def mlabel (lab (gpair get 0) add)
@@ -329,20 +360,14 @@ def map-has fn [
 
 def map-delete fn [ [key:String t:Map] [Map] [ t key radix-delete ] ]
 
-def map-keys fn [ [t:Map] [List] [ ([] "" t collect-r) sort ] ]
+def map-keys fn [ [t:Map] [List] [ [] "" t collect-r ] ]
 
+def map-entries fn [ [t:Map] [List] [ [] "" t collect-er ] ]
+
+# Values in key order: entries is already sorted [key, value] pairs, so
+# pluck the value column with the `$.1` lens — no per-key lookup.
 def map-values fn [
-  [t:Map] [List] [
-    def ks (([] "" t collect-r) sort)
-    ks each [ var [[k] (t k radix-get) ] ]
-  ]
-]
-
-def map-entries fn [
-  [t:Map] [List] [
-    def ks (([] "" t collect-r) sort)
-    ks each [ var [[k] (t k kv-pair) ] ]
-  ]
+  [t:Map] [List] [ (t map-entries) each $.1 ]
 ]
 
 def map-size fn [ [t:Map] [Integer] [ t count-keys ] ]
@@ -350,12 +375,12 @@ def map-size fn [ [t:Map] [Integer] [ t count-keys ] ]
 def map-height fn [ [t:Map] [Integer] [ t node-height ] ]
 
 def map-keys-with-prefix fn [
-  [prefix:String t:Map] [List] [ ([] "" prefix t collect-prefix) sort ]
+  [prefix:String t:Map] [List] [ [] "" prefix t collect-prefix ]
 ]
 
 def map-entries-with-prefix fn [
   [prefix:String t:Map] [List] [
-    def ks (([] "" prefix t collect-prefix) sort)
+    def ks ([] "" prefix t collect-prefix)
     ks each [ var [[k] (t k kv-pair) ] ]
   ]
 ]
@@ -371,10 +396,20 @@ def map-from-entries fn [
 
 def map-encode fn [
   [t:Map] [String] [
-    def ks (([] "" t collect-r) sort)
-    def es (ks each [ var [[k] (t k kv-pair) ] ])
+    def es ([] "" t collect-er)
     def payload (do {kind: ["radixmap"], size: [t count-keys], entries: [es]})
-    `${payload}`
+    payload StructUtil.jsonify
+  ]
+]
+
+# Rebuild a map from an `encode` string (raises on a non-radixmap payload).
+def map-decode fn [
+  [s:String] [Map] [
+    def p (s StructUtil.parse)
+    if ((p "kind" get) "radixmap" eq) [ (p "entries" get) map-from-entries ] [
+      def msg `RadixMap.decode: expected kind 'radixmap', got '${(p "kind" get)}'`
+      raise msg
+    ]
   ]
 ]
 
@@ -394,14 +429,14 @@ def set-has fn [
 
 def set-delete fn [ [key:String t:Map] [Map] [ t key radix-delete ] ]
 
-def set-keys fn [ [t:Map] [List] [ ([] "" t collect-r) sort ] ]
+def set-keys fn [ [t:Map] [List] [ [] "" t collect-r ] ]
 
 def set-size fn [ [t:Map] [Integer] [ t count-keys ] ]
 
 def set-height fn [ [t:Map] [Integer] [ t node-height ] ]
 
 def set-with-prefix fn [
-  [prefix:String t:Map] [List] [ ([] "" prefix t collect-prefix) sort ]
+  [prefix:String t:Map] [List] [ [] "" prefix t collect-prefix ]
 ]
 
 def set-longest-prefix fn [ [key:String t:Map] [Any] [ none "" key t longest-r ] ]
@@ -415,9 +450,20 @@ def set-from-keys fn [
 
 def set-encode fn [
   [t:Map] [String] [
-    def ks (([] "" t collect-r) sort)
+    def ks ([] "" t collect-r)
     def payload (do {kind: ["radixset"], size: [t count-keys], keys: [ks]})
-    `${payload}`
+    payload StructUtil.jsonify
+  ]
+]
+
+# Rebuild a set from an `encode` string (raises on a non-radixset payload).
+def set-decode fn [
+  [s:String] [Map] [
+    def p (s StructUtil.parse)
+    if ((p "kind" get) "radixset" eq) [ (p "keys" get) set-from-keys ] [
+      def msg `RadixSet.decode: expected kind 'radixset', got '${(p "kind" get)}'`
+      raise msg
+    ]
   ]
 ]
 
@@ -440,6 +486,7 @@ export "RadixMap" {
   longest-prefix:      map-longest-prefix/r
   from-entries:        map-from-entries/r
   encode:              map-encode/r
+  decode:              map-decode/r
 }
 
 export "RadixSet" {
@@ -454,4 +501,5 @@ export "RadixSet" {
   longest-prefix: set-longest-prefix/r
   from-keys:      set-from-keys/r
   encode:         set-encode/r
+  decode:         set-decode/r
 }

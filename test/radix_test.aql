@@ -165,6 +165,29 @@ def fixture fn [
 ] "radixset-from-data" Test.test end
 
 
+# --- encode/decode round-trip ----------------------------------------
+
+[
+  def m (fixture)
+  def m2 ((m RadixMap.encode) RadixMap.decode)
+  (m RadixMap.entries) (m2 RadixMap.entries) Assert.equal end
+  3 (m2 "toast" RadixMap.get) Assert.equal end
+
+  def s ((((RadixSet.make) "slow" RadixSet.add) "slower" RadixSet.add) "team" RadixSet.add)
+  def s2 ((s RadixSet.encode) RadixSet.decode)
+  (s RadixSet.keys) (s2 RadixSet.keys) Assert.equal end
+
+  # an empty tree survives the round-trip
+  def e2 (((RadixMap.make) RadixMap.encode) RadixMap.decode)
+  0 (e2 RadixMap.size) Assert.equal end
+
+  # decoding a payload of the wrong kind raises a catchable, named error
+  def msg (do [ ((s RadixSet.encode) RadixMap.decode) "no-raise" ]
+           error [ var [[e] convert String (e "message" get) ] ])
+  "RadixMap.decode: expected kind 'radixmap', got 'radixset'" msg Assert.equal end
+] "codec-roundtrip" Test.test end
+
+
 # --- summary -------------------------------------------------------
 
 "---" print

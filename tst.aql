@@ -6,36 +6,38 @@
 #   TstSet — a set of Strings (membership), over the same engine.
 #
 # A ternary search tree (TST) is a hybrid of a binary search tree and a
-# trie. Each nd holds a single character and three children:
+# trie. Each node holds a single character and three children:
 #
-#   lo  — subtree for characters that sort *before*  this nd's character
+#   lo  — subtree for characters that sort *before*  this node's character
 #   mid — subtree for the *next* character, taken when this one matches
-#   hi  — subtree for characters that sort *after*   this nd's character
+#   hi  — subtree for characters that sort *after*   this node's character
 #
 # Following `mid` advances through the key; `lo`/`hi` are an ordinary BST
 # over the alternatives at one position. This needs far fewer pointers per
-# nd than a trie's full child map, handles large or sparse alphabets
+# node than a trie's full child map, handles large or sparse alphabets
 # gracefully, and yields keys in sorted order under an in-order walk — at
 # the cost of being a little deeper to descend.
 #
 # --- representation -------------------------------------------------
 #
-# A nd is a Map { ch, end, val, lo, mid, hi }; an empty tree is `none`.
-# The middle child is named "mid" (not "eq") because `eq` is a builtin word and
-# would shadow the binding.
+# A node is a Map { ch, end, val, lo, mid, hi }; an empty tree is `none`.
+# Bindings that hold a node are named `nd` (`node` itself is a reserved
+# built-in word), and the middle child is named "mid" (not "eq") because
+# `eq` is a builtin word and would shadow the binding.
 #
 # TSTs here are PERSISTENT: every mutator returns a new tree, rebuilding the
 # nodes along the edited path. Paths are assembled with core `add`.
 #
-# Imported via `import "./tst.aql"`.
+# Imported via `import "./tst.aql"`. The only dependency is the standard
+# `aql:struct-util` module (jsonic parsing for `decode`).
+
+import "aql:struct-util"
 
 
-# --- nd construction ----------------------------------------------
+# --- node construction ----------------------------------------------
 
-# Build a nd. `fin` is the terminal flag (named `fin`, not `end`, which is
-# reserved). Values are stored directly (aql `db828ec` no longer evaluates
-# `do {…}` map values, so the old box is gone).
-# Call: `ch fin val lo mid hi mk-tnode`.
+# Build a node. `fin` is the terminal flag (named `fin`, not `end`, which is
+# reserved). Call: `ch fin val lo mid hi mk-tnode`.
 def mk-tnode fn [
   [hi:Any mid:Any lo:Any val:Any fin:Any ch:String] [Map] [
     do {ch: [ch], end: [fin], val: [val], lo: [lo], mid: [mid], hi: [hi]}
@@ -100,7 +102,7 @@ def tst-get fn [
   ]
 ]
 
-# The nd matching the last character of `key`, or `none`. Used to locate
+# The node matching the last character of `key`, or `none`. Used to locate
 # the root of a prefix subtree. Call: `nd key find-node`.
 def find-node fn [
   [key:String nd:Any] [Any] [
@@ -119,9 +121,13 @@ def find-node fn [
 
 
 # --- traversal (in-order ⇒ sorted) ----------------------------------
+#
+# An in-order walk (lo, self, mid, hi) visits keys in lexicographic order —
+# the TST property — so the collectors below emit sorted output and the
+# listing words need no trailing sort.
 
 # Append every terminating key at or below `nd` (prefixed by `prefix`) to
-# `acc`. Call: `acc prefix nd collect-t`.
+# `acc`, in sorted order. Call: `acc prefix nd collect-t`.
 def collect-t fn [
   [nd:Any prefix:String acc:List] [List] [
     if (nd eq none) [acc] [
@@ -130,6 +136,20 @@ def collect-t fn [
       def a2 (if (nd "end" get) [a1 pc push] [a1])
       def a3 (a2 pc (nd "mid" get) collect-t)
       a3 prefix (nd "hi" get) collect-t
+    ]
+  ]
+]
+
+# As `collect-t`, but appends [key, value] pairs. Call: `acc prefix nd collect-et`.
+def collect-et fn [
+  [nd:Any prefix:String acc:List] [List] [
+    if (nd eq none) [acc] [
+      def a1 (acc prefix (nd "lo" get) collect-et)
+      def pc (prefix (nd "ch" get) add)
+      def v (nd "val" get)
+      def a2 (if (nd "end" get) [a1 [pc v] push] [a1])
+      def a3 (a2 pc (nd "mid" get) collect-et)
+      a3 prefix (nd "hi" get) collect-et
     ]
   ]
 ]
@@ -184,7 +204,7 @@ def tst-height fn [
 
 # --- core: delete ---------------------------------------------------
 
-# Drop a nd that has become completely empty (no key, no children).
+# Drop a node that has become completely empty (no key, no children).
 def tprune fn [
   [nd:Any] [Any] [
     if (nd eq none) [none] [
@@ -239,20 +259,14 @@ def map-has fn [
 
 def map-delete fn [ [key:String t:Any] [Any] [ t key tst-delete ] ]
 
-def map-keys fn [ [t:Any] [List] [ ([] "" t collect-t) sort ] ]
+def map-keys fn [ [t:Any] [List] [ [] "" t collect-t ] ]
 
+def map-entries fn [ [t:Any] [List] [ [] "" t collect-et ] ]
+
+# Values in key order: entries is already sorted [key, value] pairs, so
+# pluck the value column with the `$.1` lens — no per-key lookup.
 def map-values fn [
-  [t:Any] [List] [
-    def ks (([] "" t collect-t) sort)
-    ks each [ var [[k] (t k tst-get) ] ]
-  ]
-]
-
-def map-entries fn [
-  [t:Any] [List] [
-    def ks (([] "" t collect-t) sort)
-    ks each [ var [[k] def v (t k tst-get) [] k push v push ] ]
-  ]
+  [t:Any] [List] [ (t map-entries) each $.1 ]
 ]
 
 def map-size fn [ [t:Any] [Integer] [ t count-t ] ]
@@ -261,11 +275,11 @@ def map-height fn [ [t:Any] [Integer] [ t tst-height ] ]
 
 def map-keys-with-prefix fn [
   [prefix:String t:Any] [List] [
-    if ((prefix size) eq 0) [ ([] "" t collect-t) sort ] [
+    if ((prefix size) eq 0) [ [] "" t collect-t ] [
       def pn (t prefix find-node)
       if (pn eq none) [[]] [
         def acc0 (if (pn "end" get) [[] prefix push] [[]])
-        (acc0 prefix (pn "mid" get) collect-t) sort
+        acc0 prefix (pn "mid" get) collect-t
       ]
     ]
   ]
@@ -289,10 +303,20 @@ def map-from-entries fn [
 
 def map-encode fn [
   [t:Any] [String] [
-    def ks (([] "" t collect-t) sort)
-    def es (ks each [ var [[k] def v (t k tst-get) [] k push v push ] ])
+    def es ([] "" t collect-et)
     def payload (do {kind: ["tstmap"], size: [t count-t], entries: [es]})
-    `${payload}`
+    payload StructUtil.jsonify
+  ]
+]
+
+# Rebuild a map from an `encode` string (raises on a non-tstmap payload).
+def map-decode fn [
+  [s:String] [Any] [
+    def p (s StructUtil.parse)
+    if ((p "kind" get) "tstmap" eq) [ (p "entries" get) map-from-entries ] [
+      def msg `TstMap.decode: expected kind 'tstmap', got '${(p "kind" get)}'`
+      raise msg
+    ]
   ]
 ]
 
@@ -312,7 +336,7 @@ def set-has fn [
 
 def set-delete fn [ [key:String t:Any] [Any] [ t key tst-delete ] ]
 
-def set-keys fn [ [t:Any] [List] [ ([] "" t collect-t) sort ] ]
+def set-keys fn [ [t:Any] [List] [ [] "" t collect-t ] ]
 
 def set-size fn [ [t:Any] [Integer] [ t count-t ] ]
 
@@ -320,11 +344,11 @@ def set-height fn [ [t:Any] [Integer] [ t tst-height ] ]
 
 def set-with-prefix fn [
   [prefix:String t:Any] [List] [
-    if ((prefix size) eq 0) [ ([] "" t collect-t) sort ] [
+    if ((prefix size) eq 0) [ [] "" t collect-t ] [
       def pn (t prefix find-node)
       if (pn eq none) [[]] [
         def acc0 (if (pn "end" get) [[] prefix push] [[]])
-        (acc0 prefix (pn "mid" get) collect-t) sort
+        acc0 prefix (pn "mid" get) collect-t
       ]
     ]
   ]
@@ -341,9 +365,20 @@ def set-from-keys fn [
 
 def set-encode fn [
   [t:Any] [String] [
-    def ks (([] "" t collect-t) sort)
+    def ks ([] "" t collect-t)
     def payload (do {kind: ["tstset"], size: [t count-t], keys: [ks]})
-    `${payload}`
+    payload StructUtil.jsonify
+  ]
+]
+
+# Rebuild a set from an `encode` string (raises on a non-tstset payload).
+def set-decode fn [
+  [s:String] [Any] [
+    def p (s StructUtil.parse)
+    if ((p "kind" get) "tstset" eq) [ (p "keys" get) set-from-keys ] [
+      def msg `TstSet.decode: expected kind 'tstset', got '${(p "kind" get)}'`
+      raise msg
+    ]
   ]
 ]
 
@@ -366,6 +401,7 @@ export "TstMap" {
   longest-prefix:      map-longest-prefix/r
   from-entries:        map-from-entries/r
   encode:              map-encode/r
+  decode:              map-decode/r
 }
 
 export "TstSet" {
@@ -380,4 +416,5 @@ export "TstSet" {
   longest-prefix: set-longest-prefix/r
   from-keys:      set-from-keys/r
   encode:         set-encode/r
+  decode:         set-decode/r
 }
