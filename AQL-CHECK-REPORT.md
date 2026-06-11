@@ -49,7 +49,7 @@ aql check --soft trie.aql
 aql check --soft trie.aql radix.aql tst.aql burst.aql
 
 # Confirm the same code RUNS correctly:
-aql test/trie_test.aql      # ... "all green"
+aql test/trie_unit_test.aql      # ... "all green"
 ```
 
 `--soft` makes `check` exit `0` regardless of findings; without it, `check`

@@ -64,19 +64,21 @@ jobs:
 
       # Each suite ends with `0 test.fail-count end assert.equal`, so a
       # failure makes aql exit non-zero and fails the step.
-      - name: Unit tests — standard trie
-        run: aql test/trie_test.aql
+      - name: Unit tests — standard trie (direct)
+        run: aql test/trie_unit_test.aql
+      - name: Unit tests — standard trie (spec)
+        run: aql test/trie_unit_spec.aql
       - name: Unit tests — radix tree
-        run: aql test/radix_test.aql
+        run: aql test/radix_unit_test.aql
       - name: Unit tests — ternary search tree
-        run: aql test/tst_test.aql
+        run: aql test/tst_unit_test.aql
       - name: Unit tests — burst trie
-        run: aql test/burst_test.aql
+        run: aql test/burst_unit_test.aql
 
       - name: Property tests — standard trie (spec)
         run: aql test/trie_prop_spec.aql
-      - name: Property tests — standard trie (pbt)
-        run: aql test/trie_pbt.aql
+      - name: Property tests — standard trie (direct)
+        run: aql test/trie_prop_test.aql
       - name: Property tests — radix tree
         run: aql test/radix_prop_spec.aql
       - name: Property tests — ternary search tree
@@ -85,7 +87,7 @@ jobs:
         run: aql test/burst_prop_spec.aql
 
       - name: Smoke demo
-        run: aql test/smoke.aql
+        run: aql test/trie_smoke_test.aql
 
       # Advisory static check — NOT a gate. `aql check` is a structural type
       # checker, but this library is deliberately generic: every node is a plain
@@ -100,3 +102,61 @@ jobs:
       - name: Static check (advisory, non-gating)
         continue-on-error: true
         run: aql check --soft trie.aql radix.aql tst.aql burst.aql
+
+  # Lightweight guard for the agent-skill packaging and the pinned-ref single
+  # source of truth (no aql needed). The plugin must bundle its own copy of the
+  # skill — plugins can't point at an external .claude/skills dir — so two
+  # copies exist and can drift; and the aql commit is pinned in several files
+  # that must agree.
+  consistency:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out trie
+        uses: actions/checkout@v4
+
+      - name: SKILL.md copies are in sync
+        run: |
+          canonical=.claude/skills/trie-aql/SKILL.md
+          bundled=plugins/trie-aql/skills/trie-aql/SKILL.md
+          if ! diff -u "$canonical" "$bundled"; then
+            echo "::error file=$bundled::Plugin skill has drifted from $canonical"
+            echo "Fix by copying the canonical skill over the bundled one:"
+            echo "  cp $canonical $bundled"
+            exit 1
+          fi
+          echo "SKILL.md copies are identical."
+
+      - name: JSON manifests are valid
+        run: |
+          for j in .claude-plugin/marketplace.json \
+                   plugins/trie-aql/.claude-plugin/plugin.json \
+                   api.json; do
+            if python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$j"; then
+              echo "ok: $j"
+            else
+              echo "::error file=$j::invalid JSON"
+              exit 1
+            fi
+          done
+
+      # The pinned aql commit lives in several files; they must agree or a
+      # session/CI builds a different interpreter than the one this library is
+      # verified against (the exact drift this repo previously had between its
+      # hook and CI). ci/test.yml's env.AQL_REF (full 40-char) is the single
+      # source of truth; api.json stores a short prefix, so compare by prefix.
+      - name: Pinned aql ref is consistent across files
+        run: |
+          ref='${{ env.AQL_REF }}'
+          fail=0
+          hook_ref=$(grep -oE 'AQL_REF=[0-9a-f]{7,40}' .claude/hooks/session-start.sh | head -1 | cut -d= -f2)
+          if [ "$hook_ref" != "$ref" ]; then
+            echo "::error file=.claude/hooks/session-start.sh::AQL_REF=$hook_ref != ci/test.yml AQL_REF=$ref"
+            fail=1
+          fi
+          api_ref=$(python3 -c "import json;print(json.load(open('api.json'))['aql_ref'])")
+          if [ "${ref:0:${#api_ref}}" != "$api_ref" ]; then
+            echo "::error file=api.json::aql_ref=$api_ref is not a prefix of ci/test.yml AQL_REF=$ref"
+            fail=1
+          fi
+          [ "$fail" = 0 ] && echo "ok: pinned aql ref consistent ($ref; api.json prefix $api_ref)"
+          exit $fail

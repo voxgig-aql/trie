@@ -14,6 +14,7 @@ links into the [Explanation](explanation.md); for exact signatures, the
 - [Delete keys](#delete-keys)
 - [Switch between variants](#switch-between-variants)
 - [Serialize a trie](#serialize-a-trie)
+- [Fuzzy and wildcard search (standard trie)](#fuzzy-and-wildcard-search-standard-trie)
 - [Use a trie from your own script](#use-a-trie-from-your-own-script)
 - [Run the tests](#run-the-tests)
 
@@ -35,7 +36,7 @@ Put `$HOME/.local/bin` on your `PATH`, then check and run:
 
 ```bash
 aql -version
-aql test/smoke.aql
+aql test/trie_smoke_test.aql
 ```
 
 This library is verified against aql commit `db828ec`; the CI workflow
@@ -187,6 +188,8 @@ def t2   (keys TrieSet.from-keys)  # …and rebuild later
 For a map use `entries` with `Map.from-entries`. `from-keys`/`from-entries`
 are available on every variant.
 
+---
+
 ## Fuzzy and wildcard search (standard trie)
 
 The standard trie adds two advanced queries. **Fuzzy** search returns every
@@ -225,27 +228,29 @@ def t (RadixSet.make)
 Forward arguments have precedence and a call resolves at the next function
 word or paren, so you rarely need a terminator; add `end`, parens, or the
 `/s` modifier only to stop a bare following literal from being grabbed.
-`test/smoke.aql` is a complete worked example you can copy from.
+`test/trie_smoke_test.aql` is a complete worked example you can copy from.
 
 ---
 
 ## Run the tests
 
-Each variant ships a unit suite and a property suite; the standard trie
-additionally has a second property suite exercising the imperative
-`test.check-prop` driver:
+Each variant ships an example-based unit suite and a declarative property
+suite. The standard trie additionally ships the other two framework
+surfaces — a declarative unit spec and an imperative property suite — so
+all four are demonstrated:
 
 ```bash
-aql test/trie_test.aql         # unit tests (standard trie)
-aql test/radix_test.aql        # unit tests (radix)
-aql test/tst_test.aql          # unit tests (ternary search tree)
-aql test/burst_test.aql        # unit tests (burst trie)
+aql test/trie_unit_test.aql    # unit tests — standard trie (direct)
+aql test/trie_unit_spec.aql    # unit tests — standard trie (declarative spec)
+aql test/radix_unit_test.aql   # unit tests — radix
+aql test/tst_unit_test.aql     # unit tests — ternary search tree
+aql test/burst_unit_test.aql   # unit tests — burst trie
 
-aql test/trie_prop_spec.aql    # property tests — declarative spec form
-aql test/trie_pbt.aql          # property tests — direct test.check-prop form
-aql test/radix_prop_spec.aql   # property tests (radix, with trie cross-check)
-aql test/tst_prop_spec.aql     # property tests (tst,   with trie cross-check)
-aql test/burst_prop_spec.aql   # property tests (burst, with trie cross-check)
+aql test/trie_prop_spec.aql    # property tests — standard trie (declarative spec)
+aql test/trie_prop_test.aql    # property tests — standard trie (direct test.check-prop)
+aql test/radix_prop_spec.aql   # property tests — radix (with trie cross-check)
+aql test/tst_prop_spec.aql     # property tests — tst   (with trie cross-check)
+aql test/burst_prop_spec.aql   # property tests — burst (with trie cross-check)
 ```
 
 Each file ends by asserting `test.fail-count` is `0`, so a failure makes
