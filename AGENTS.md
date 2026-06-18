@@ -7,7 +7,7 @@ a downstream project) and **extending** it. Human docs: `README.md`, `docs/`
 
 The four modules depend only on the **standard `aql:struct-util` module**
 (map enumeration + jsonic parse/serialise), which ships with the interpreter —
-no third-party dependencies. Verified against `aql` commit `7193a7d3`.
+no third-party dependencies. Verified against `aql` commit `5aed3834`.
 
 ---
 
@@ -190,6 +190,18 @@ Read `DX-REPORT.md` for the full account; the load-bearing AQL traps are:
   **key-sorted**, which is what makes traversal output sorted by
   construction). There is **no key-removal word**: to drop a key, rebuild the
   map from its items, skipping the key.
+- **`StructUtil.items` sorts; the native map words do NOT.** Enumerate node
+  children only with `StructUtil.items` (key-sorted). The native map-iteration
+  words added in the `7193a7d3` window — `each`/`for-each`/`fold`/`filter`
+  over a Map, plus `keys`/`vals` — walk entries in **insertion order**, and a
+  node map built by repeated `kids set (ch) child` is in insertion order, not
+  sorted. Swapping a sorted `StructUtil.items` fold for a native `m vals`/`m
+  […] fold` therefore **silently breaks** the key-sorted guarantee (rule 4).
+  It *looks* like a clean modernisation; it is a sorting bug. (`m sort`
+  returns a sorted snapshot, but `m sort` + a native word is two steps where
+  `StructUtil.items` is one — no win.) Verified at `5aed3834`: a `set`-built
+  `{c:3,a:1,b:2}` gives `StructUtil.items` `[[a 1][b 2][c 3]]` but `keys`
+  `[c a b]`.
 - **Never use `StructUtil.merge` to update a node** — it is a *deep,
   index-wise* merge (`merge` is no longer a core word). Rebuild nodes with the
   explicit `mk-*` constructor; `StructUtil.setpath` is the one-field update if

@@ -371,11 +371,14 @@ item 5's spirit arrived (`mixed_form_call` ships as info, not error), and
 exports, core `Returns`, `Any`-unification, body re-parser) remain the
 gap between "advisory" and "gate".
 
-## Re-run at `7193a7d3` (2026-06-18)
+## Re-run at `5aed3834` (2026-06-18)
 
 Re-run per module on the migrated code (the `keys`-list bindings are now
 `ks`; reproduce the standalone examples above by renaming their `node`
 bindings *and* any `keys`/`vals` ones — all reserved core words now).
+First run at `7193a7d3`; re-confirmed byte-identical at the `5aed3834`
+re-pin (the in-progress bytecode compiler did not move `check`'s output —
+same positions, same class histogram, `uncalled_function` intact).
 
 **What improved: positions.** Every diagnostic now carries a `row:col`
 and an explicit `[info]`/`[warning]`/`[error]` severity —

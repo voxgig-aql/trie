@@ -1,7 +1,7 @@
 {
   "name": "trie",
-  "version": "0.2.1",
-  "aql_ref": "7193a7d3",
+  "version": "0.2.2",
+  "aql_ref": "5aed3834",
   "description": "Prefix-tree (trie) utilities for AQL: four variants, each as a Set and a Map.",
   "conventions": {
     "import": "forward form, no terminator: import \"./trie.aql\"",

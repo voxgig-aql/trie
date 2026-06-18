@@ -435,17 +435,21 @@ message, interpolation-vs-jsonify for `none`, hydrated-null vs
 report exists to flag, and none cost more than minutes against a pinned,
 tested upgrade.
 
-## Third upgrade review (`7193a7d3`, 2026-06-18)
+## Third upgrade review (`5aed3834`, 2026-06-18)
 
-Re-verified and migrated against `aql` `7193a7d3` — 39 commits past
-`958c379b`. The headline of this window is the **native map-iteration
-work** (`each`/`for-each`/`fold`/`filter` gained Map overloads, the
-`KeyVal` entry type landed, and `keys`/`vals` became core words), plus a
-batch of DX fixes the language team shipped in response to a *different*
-consumer's report (`voxgig-aql/decision/dx-report.md`) — several of which
-also close papercuts this library logged in round 2. Every status below is
-backed by this repo's ten suites running green at the new pin, or a
-minimal probe.
+Migrated against `aql` `7193a7d3` — 39 commits past `958c379b` — then
+re-verified and re-pinned at `5aed3834`, a *further* 298 commits on. That
+second jump is dominated by an in-progress **bytecode compiler** (the
+newest commit is a "checker/bytecode-compiler architecture review and
+plan"); all ten suites run green at `5aed3834`, so it is compatible, but
+the pin now tracks a mid-refactor HEAD rather than a settled point. The
+headline of the migration window is the **native map-iteration work**
+(`each`/`for-each`/`fold`/`filter` gained Map overloads, the `KeyVal` entry
+type landed, and `keys`/`vals` became core words), plus a batch of DX fixes
+the language team shipped in response to a *different* consumer's report
+(`voxgig-aql/decision/dx-report.md`) — several of which also close
+papercuts this library logged in round 2. Every status below is backed by
+this repo's ten suites running green at the pin, or a minimal probe.
 
 ### The one breaking change here
 
@@ -454,10 +458,27 @@ minimal probe.
 | `keys` and `vals` became reserved core words (native map columns); `has`, `scan`, `canon` also now reserved | only **`keys`** collided — it was this library's binding name for a key list in `build-from-keys`/`set-from-keys` and the variant equivalents (plus `[[keys …]]` destructures in the property suites). Renamed every such *binding* to **`ks`**; the public API names (`TrieSet.keys`, the `keys:` field in `encode` payloads) are map keys, not bindings, and are untouched. Same churn class as round 2's `node`→`nd`, and just as loud (`[aql/reserved_word]` at bind time). `val` is **not** reserved — only the plural `vals` — so the pervasive `val` field/binding survived. |
 
 That was the *entire* migration: no behavioural change, no logic touched,
-suites green after a mechanical rename. The native `keys`/`vals`/map-`fold`
-words are an **adoption opportunity** (they would retire the
-`StructUtil.items`-fold idiom the same way round 2 retired association
-lists), but that is a refactor, not a fix — deferred, not required.
+suites green after a mechanical rename.
+
+**The native map words are NOT an adoption target — a corrected finding.**
+An earlier draft of this report floated retiring the `StructUtil.items`-fold
+idiom in favour of native `keys`/`vals`/map-`fold`, the way round 2 retired
+association lists. On inspection that is **unsafe**: native map iteration
+(`each`/`for-each`/`fold`/`filter`/`keys`/`vals`) walks entries in
+**insertion order**, whereas this library's sorted-output guarantee (rule 4)
+comes from `StructUtil.items`, which **sorts**. On a `set`-built node map
+`{c:3,a:1,b:2}` the split is stark — `StructUtil.items` →
+`[["a",1],["b",2],["c",3]]` (sorted, what the collectors walk) but
+`keys`/`vals` → `["c","a","b"]`/`[3,1,2]` (insertion). They are not
+interchangeable, and `m sort` plus a native word is two steps where
+`StructUtil.items` is one: no simplification, only a sorting hazard. So the
+idiom stays — `StructUtil.items` is the right, minimal tool — and the trap
+is now a documented foot-gun (AGENTS.md), because insertion-order map words
+that *look* like a clean modernisation are exactly what a future contributor
+would reach for. (Curiosity worth flagging upstream: a map **literal**
+`{c:3,a:1,b:2}` still prints key-sorted while the `set`-built equivalent
+prints in insertion order — the same value canonicalises two ways depending
+on construction path.)
 
 ### Round-2 papercuts, re-scored
 
