@@ -237,8 +237,8 @@ def node-height fn [
 
 # Build a trie from a list of keys (the inverse of `keys`). Call: `keys build-from-keys`.
 def build-from-keys fn [
-  [keys:List] [Map] [
-    empty-node keys [ var [[k acc] (acc k true trie-insert) ] ] fold
+  [ks:List] [Map] [
+    empty-node ks [ var [[k acc] (acc k true trie-insert) ] ] fold
   ]
 ]
 
@@ -533,7 +533,7 @@ def set-within fn [ [k:Integer query:String t:Map] [List] [ t query k trie-withi
 def set-match fn [ [pattern:String t:Map] [List] [ t pattern trie-match ] ]
 
 # Rebuild a set from a list of keys (inverse of `keys`).
-def set-from-keys fn [ [keys:List] [Map] [ keys build-from-keys ] ]
+def set-from-keys fn [ [ks:List] [Map] [ ks build-from-keys ] ]
 
 def set-encode fn [ [t:Map] [String] [ t encode-set ] ]
 

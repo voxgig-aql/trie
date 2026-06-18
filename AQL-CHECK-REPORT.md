@@ -370,3 +370,35 @@ item 5's spirit arrived (`mixed_form_call` ships as info, not error), and
 `uncalled_function` is a genuine, load-bearing win; items 1–4 (trace `/r`
 exports, core `Returns`, `Any`-unification, body re-parser) remain the
 gap between "advisory" and "gate".
+
+## Re-run at `7193a7d3` (2026-06-18)
+
+Re-run per module on the migrated code (the `keys`-list bindings are now
+`ks`; reproduce the standalone examples above by renaming their `node`
+bindings *and* any `keys`/`vals` ones — all reserved core words now).
+
+**What improved: positions.** Every diagnostic now carries a `row:col`
+and an explicit `[info]`/`[warning]`/`[error]` severity —
+`check: 76:68: [error] no_signature: …` where the round-2 output was
+often position-less (`--> source position unknown`). For a tool you skim
+by eye in CI logs, that is the single most useful change this window; it
+turns "somewhere in radix.aql" into a clickable site.
+
+**What's unchanged: the false positives.** Same five classes, same
+character, similar volume — `no_signature` on every `Any`-typed
+`get`/fold shape (101 in `trie.aql`), `unused_def` still on all the `/r`
+reference-exports (35 — the checker still can't trace reference-export),
+`missing_returns` on core words without declared `Returns` (20),
+`undefined_word` (1–6, on `do {…}`-quotation params and mutually-recursive
+pairs), and the `mixed_form_call` *info* advisories (~47, on the
+deliberate receiver-first convention). The multi-file invocation still
+halts early, so per-file runs remain the accurate measure.
+`uncalled_function` still fires on a wrong-order namespace call — the
+load-bearing win is intact.
+
+**Verdict unchanged.** Positions make the advisory output materially
+easier to act on, but the gate-vs-advisory math is the same: items 1–4 of
+the original wishlist (trace `/r` exports, core `Returns`, `Any`-
+unification, a body re-parser) are still what stand between this output
+and a gateable true-positive set. CI keeps the `--soft` +
+`continue-on-error` step.

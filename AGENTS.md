@@ -7,7 +7,7 @@ a downstream project) and **extending** it. Human docs: `README.md`, `docs/`
 
 The four modules depend only on the **standard `aql:struct-util` module**
 (map enumeration + jsonic parse/serialise), which ships with the interpreter —
-no third-party dependencies. Verified against `aql` commit `958c379b`.
+no third-party dependencies. Verified against `aql` commit `7193a7d3`.
 
 ---
 
@@ -198,10 +198,15 @@ Read `DX-REPORT.md` for the full account; the load-bearing AQL traps are:
   A namespace word whose top-of-stack type doesn't match no longer fails
   silently — the runtime raises `uncalled_function` at end of run, and
   `aql check` flags it — but still write the intended call form in a comment.
-- **Reserved binding names**: `end` (call terminator) and **`node`** (a
+- **Reserved binding names**: `end` (call terminator), **`node`** (a
   built-in word since the Flex-container work — this library names node
-  bindings `nd`). Most names that used to be rejected (`eq`, `L`, single
-  capitals) now work, but avoid shadowing core words you call.
+  bindings `nd`), and — since the native map-iteration work (`7193a7d3`) —
+  **`keys`**, **`vals`**, **`has`**, **`scan`**, and **`canon`** (this
+  library renamed its `keys`-list bindings to `ks`; `val` is *not*
+  reserved, only the plural `vals`). Reserved names are loud at bind time
+  (`[aql/reserved_word]`), so a collision fails fast rather than silently.
+  Most names that used to be rejected (`eq`, `L`, single capitals) now
+  work, but avoid shadowing core words you call.
 - **Index lists as `xs get (i)`**, not `xs get i` — a bare word after `get` is
   a *literal* key (JS `.key`), a parenthesised one is *computed* (JS `[expr]`).
   This is defined semantics now, not a bug.

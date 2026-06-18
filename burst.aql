@@ -454,8 +454,8 @@ def set-longest-prefix fn [ [key:String t:Map] [Any] [ none "" key t longest-b ]
 
 # Rebuild a set from a list of keys (inverse of `keys`).
 def set-from-keys fn [
-  [keys:List] [Map] [
-    ([] mk-bucket) keys [ var [[k acc] (acc k true b-insert) ] ] fold
+  [ks:List] [Map] [
+    ([] mk-bucket) ks [ var [[k acc] (acc k true b-insert) ] ] fold
   ]
 ]
 

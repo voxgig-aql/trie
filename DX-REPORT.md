@@ -434,3 +434,109 @@ message, interpolation-vs-jsonify for `none`, hydrated-null vs
 `Assert.equal` — are exactly the kind of small, silent asymmetries this
 report exists to flag, and none cost more than minutes against a pinned,
 tested upgrade.
+
+## Third upgrade review (`7193a7d3`, 2026-06-18)
+
+Re-verified and migrated against `aql` `7193a7d3` — 39 commits past
+`958c379b`. The headline of this window is the **native map-iteration
+work** (`each`/`for-each`/`fold`/`filter` gained Map overloads, the
+`KeyVal` entry type landed, and `keys`/`vals` became core words), plus a
+batch of DX fixes the language team shipped in response to a *different*
+consumer's report (`voxgig-aql/decision/dx-report.md`) — several of which
+also close papercuts this library logged in round 2. Every status below is
+backed by this repo's ten suites running green at the new pin, or a
+minimal probe.
+
+### The one breaking change here
+
+| Change | Effect here |
+|---|---|
+| `keys` and `vals` became reserved core words (native map columns); `has`, `scan`, `canon` also now reserved | only **`keys`** collided — it was this library's binding name for a key list in `build-from-keys`/`set-from-keys` and the variant equivalents (plus `[[keys …]]` destructures in the property suites). Renamed every such *binding* to **`ks`**; the public API names (`TrieSet.keys`, the `keys:` field in `encode` payloads) are map keys, not bindings, and are untouched. Same churn class as round 2's `node`→`nd`, and just as loud (`[aql/reserved_word]` at bind time). `val` is **not** reserved — only the plural `vals` — so the pervasive `val` field/binding survived. |
+
+That was the *entire* migration: no behavioural change, no logic touched,
+suites green after a mechanical rename. The native `keys`/`vals`/map-`fold`
+words are an **adoption opportunity** (they would retire the
+`StructUtil.items`-fold idiom the same way round 2 retired association
+lists), but that is a refactor, not a fix — deferred, not required.
+
+### Round-2 papercuts, re-scored
+
+| Papercut (round 2) | Status at `7193a7d3` |
+|---|---|
+| `e "message" get` is **not a String** (size 0, not `eq` to the literal) | ✅ **fixed** — it is now a genuine `String` (`eq` to the literal, correct `size`), part of the do/error stack-neutrality work. The `convert String` guard in this library's `decode` tests is now a harmless no-op, kept for back-compat. |
+| Interpolating a payload renders `none` as `None({})`, unreadable by `parse` | 📖 unchanged **by design** — `StructUtil.jsonify` remains the matched serialiser (`none` → JSON `null`); `encode` already uses it. |
+| A `parse`-hydrated `null` is `eq`/`deq`-equal to `none` but `Assert.equal` distinguishes it | 🟠 **persists** — re-probed: `eq`/`deq` both `true`, yet `Assert.equal none hydrated` still raises `expected None, got none` (the value now renders lowercase, from `2a632eef`, but the assert-vs-eq asymmetry stands). Tests still assert that one case via `eq`. |
+| Chained sibling prints reverse (`"a" print (x) print`) | 🟠 **persists** — the two-phase forward-collection model was *documented* (`design/FORWARD-COLLECTION-PHASES.10.md`) but the reversal is unchanged; the smoke demo keeps one `end`-terminated print per statement. |
+| `node` re-reserved | 🟠 still reserved, now with company (`keys`/`vals`/`has`/`scan`/`canon`). |
+
+### DX improvements that landed this window
+
+- **`do`/`error` is stack-neutral.** The error branch now leaves *exactly*
+  the handler's result — any residue the `do` block pushed before raising
+  (or the caught error itself, if the handler ignores it) is stripped,
+  mirroring the success pass-through. Verified. Directly relevant to
+  `decode`'s `do […] error […]` guard.
+- **Errors carry location across an import boundary.** An error raised
+  inside an imported `fn` now renders with the *module* file's name, line,
+  and caret (`--> /path/mod.aql:row:col`) instead of losing its position —
+  exactly the fidelity entry-file errors already had. This matters because
+  the whole library is consumed via `import`; a downstream `decode` raise
+  now points into `trie.aql`, not nowhere.
+- **Swapped-argument hint.** When a dispatch fails but the argument tuple
+  matches a signature under a permutation, the error now says "one exists
+  for (String, Map) — did you swap the arguments?" instead of the
+  misleading forward-grouping hint. Complements the round-2
+  `uncalled_function` work as the second half of the "loud dispatch
+  failure" story.
+- **Core `has` word.** A total presence predicate (`Boolean`, `false` on
+  missing key / out-of-range / `none` parent) across Map/List/record/Array
+  — the general form of this library's namespace `has`, and the clean way
+  to distinguish absent from present-with-`none` (rule 5) in any consumer
+  code that touches raw nodes.
+- **Flex writes ADOPT.** A plain Map/List stored into a flex container is
+  now deep-copied to flex (so a later write through it sticks — the old
+  "mixed tree" silently-lost-write bug, `e2abf68d`); a flex value stored
+  into a flex container is *shared* by reference; a value stored into a
+  plain container is snapshotted immutable. Verified all three. This makes
+  the flex-transient build pattern robust without hand-`flex`-ing every
+  child — strengthening the "FlexMap is the transient twin" half of the
+  persistent-map discussion below.
+- **`canon` word** — round-trippable canonical AQL source for any value
+  (`{end:false kids:{a:1} val:none}`). An alternative to this library's
+  JSON-targeted `encode`; not adopted (we want portable JSON text), but a
+  clean inspection/snapshot tool.
+- **`aql check` gained positions.** Diagnostics now carry `row:col` and an
+  explicit `[info]`/`[warning]`/`[error]` severity (the round-2 re-run
+  complained of position-less reports). The false-positive *classes* and
+  *volume* are unchanged, so the advisory-only verdict stands — see the
+  check report's round-3 note.
+
+### The standing asks (from the persistent-map design review)
+
+A separate design thread this round stress-tested whether the runtime's
+mutable containers close the long-standing "every Map `set` is a full
+copy" ceiling. They do not — but they sharpened the ask:
+
+1. **A native persistent Map** (CHAMP/HAMT behind the *existing*
+   copy-returning `set` — a representation swap, not a new type or
+   semantics) remains the headline performance ask. Map's contract is
+   already persistence-shaped; only the cost model is wrong (O(n) copy per
+   `set`, which makes the idiomatic `fold`-build O(n²) — measured 4.4 s for
+   4 000 entries vs 0.47 s for the in-place flex equivalent). Keys are
+   string-only and every surface enumeration (`print`, `jsonify`,
+   `StructUtil.items`) is already key-sorted, so hash order would stay
+   unobservable — the swap is invisible to every existing program.
+2. **An `inflex` / O(1) seal** is the cheap companion ask: today `node`
+   (the flex→immutable freeze) is a deep copy, so a userland persistent
+   structure built on flex transients pays an O(size) seal at the API
+   boundary, erasing the win. An ownership-transfer seal (Clojure's
+   `persistent!`: flip an edit bit, invalidate stale writers) plus a
+   transitively-contains-flex purity bit would make the seal O(1) and
+   legitimise userland persistent structures — smaller than shipping CHAMP,
+   and exactly the word a CHAMP-with-transients API would want anyway. The
+   flex-adopt work above is adjacent but does not provide it.
+
+Neither blocks this library — tries are narrow-fanout, so copy-returning
+`set` copies little, and the data words (`from-keys`/`from-entries`) batch
+the build. They are upstream wishes, logged here because this is the report
+the language team reads.

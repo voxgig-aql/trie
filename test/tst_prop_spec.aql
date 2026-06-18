@@ -23,14 +23,14 @@ def starts-with fn [
 ]
 
 def tst-of fn [
-  [keys:List] [Any] [
-    (TstSet.make) keys [ var [[k acc] acc k TstSet.add end ] ] fold
+  [ks:List] [Any] [
+    (TstSet.make) ks [ var [[k acc] acc k TstSet.add end ] ] fold
   ]
 ]
 
 def trie-of fn [
-  [keys:List] [Map] [
-    (TrieSet.make) keys [ var [[k acc] acc k TrieSet.add end ] ] fold
+  [ks:List] [Map] [
+    (TrieSet.make) ks [ var [[k acc] acc k TrieSet.add end ] ] fold
   ]
 ]
 
@@ -76,25 +76,25 @@ def specs [
 
   (Test.prop "bulk-all-present"
     [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 1 15) ]
-    [ var [[keys]
-        def s (keys tst-of)
-        (keys each [ var [[k] s k TstSet.has end ] ]) all end
+    [ var [[ks]
+        def s (ks tst-of)
+        (ks each [ var [[k] s k TstSet.has end ] ]) all end
     ] ])
 
   (Test.prop "prefix-sound"
     [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 1 15) ]
-    [ var [[keys]
-        def s (keys tst-of)
-        def p (keys get 0)
+    [ var [[ks]
+        def s (ks tst-of)
+        def p (ks get 0)
         def hits (s p TstSet.with-prefix)
         hits p all-have-prefix
     ] ])
 
   (Test.prop "delete-removes-one"
     [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 2 15) ]
-    [ var [[keys]
-        def s (keys tst-of)
-        def k (keys get 0)
+    [ var [[ks]
+        def s (ks tst-of)
+        def k (ks get 0)
         def before (s TstSet.size)
         def s2 (s k TstSet.delete)
         def gone ((s2 k TstSet.has) not)
@@ -106,9 +106,9 @@ def specs [
   # sorted key list. The TST's in-order walk must agree with the trie.
   (Test.prop "tst-matches-trie"
     [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 1 20) ]
-    [ var [[keys]
-        def a (keys tst-of)
-        def b (keys trie-of)
+    [ var [[ks]
+        def a (ks tst-of)
+        def b (ks trie-of)
         (a TstSet.keys) (b TrieSet.keys) deq
     ] ])
 

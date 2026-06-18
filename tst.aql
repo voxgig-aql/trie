@@ -358,8 +358,8 @@ def set-longest-prefix fn [ [key:String t:Any] [Any] [ none "" key t longest-t ]
 
 # Rebuild a set from a list of keys (inverse of `keys`).
 def set-from-keys fn [
-  [keys:List] [Any] [
-    none keys [ var [[k acc] (acc k true tst-insert) ] ] fold
+  [ks:List] [Any] [
+    none ks [ var [[k acc] (acc k true tst-insert) ] ] fold
   ]
 ]
 

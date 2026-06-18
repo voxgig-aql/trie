@@ -23,14 +23,14 @@ def starts-with fn [
 ]
 
 def burst-of fn [
-  [keys:List] [Map] [
-    (BurstSet.make) keys [ var [[k acc] acc k BurstSet.add end ] ] fold
+  [ks:List] [Map] [
+    (BurstSet.make) ks [ var [[k acc] acc k BurstSet.add end ] ] fold
   ]
 ]
 
 def trie-of fn [
-  [keys:List] [Map] [
-    (TrieSet.make) keys [ var [[k acc] acc k TrieSet.add end ] ] fold
+  [ks:List] [Map] [
+    (TrieSet.make) ks [ var [[k acc] acc k TrieSet.add end ] ] fold
   ]
 ]
 
@@ -77,25 +77,25 @@ def specs [
   # Larger batches so buckets burst (burst-limit is 8).
   (Test.prop "bulk-all-present"
     [ r.list-of [ r.string charset (r.int 1 6) ] (r.int 5 30) ]
-    [ var [[keys]
-        def s (keys burst-of)
-        (keys each [ var [[k] s k BurstSet.has end ] ]) all end
+    [ var [[ks]
+        def s (ks burst-of)
+        (ks each [ var [[k] s k BurstSet.has end ] ]) all end
     ] ])
 
   (Test.prop "prefix-sound"
     [ r.list-of [ r.string charset (r.int 1 6) ] (r.int 5 30) ]
-    [ var [[keys]
-        def s (keys burst-of)
-        def p (keys get 0)
+    [ var [[ks]
+        def s (ks burst-of)
+        def p (ks get 0)
         def hits (s p BurstSet.with-prefix)
         hits p all-have-prefix
     ] ])
 
   (Test.prop "delete-removes-one"
     [ r.list-of [ r.string charset (r.int 1 6) ] (r.int 5 30) ]
-    [ var [[keys]
-        def s (keys burst-of)
-        def k (keys get 0)
+    [ var [[ks]
+        def s (ks burst-of)
+        def k (ks get 0)
         def before (s BurstSet.size)
         def s2 (s k BurstSet.delete)
         def gone ((s2 k BurstSet.has) not)
@@ -106,9 +106,9 @@ def specs [
   # CROSS-CHECK against the standard trie over identical (bursting) batches.
   (Test.prop "burst-matches-trie"
     [ r.list-of [ r.string charset (r.int 1 6) ] (r.int 5 40) ]
-    [ var [[keys]
-        def a (keys burst-of)
-        def b (keys trie-of)
+    [ var [[ks]
+        def a (ks burst-of)
+        def b (ks trie-of)
         (a BurstSet.keys) (b TrieSet.keys) deq
     ] ])
 

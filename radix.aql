@@ -443,8 +443,8 @@ def set-longest-prefix fn [ [key:String t:Map] [Any] [ none "" key t longest-r ]
 
 # Rebuild a set from a list of keys (inverse of `keys`).
 def set-from-keys fn [
-  [keys:List] [Map] [
-    empty-node keys [ var [[k acc] (acc k true radix-insert) ] ] fold
+  [ks:List] [Map] [
+    empty-node ks [ var [[k acc] (acc k true radix-insert) ] ] fold
   ]
 ]
 
