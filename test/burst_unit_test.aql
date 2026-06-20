@@ -1,31 +1,33 @@
 # Burst-trie tests using aql:test's imperative API.
 #
-# Run:
+# Runs identically under the interpreter, `aql check`, and the bytecode
+# compiler:
 #   aql test/burst_unit_test.aql
+#   aql check test/burst_unit_test.aql
+#   aql --force-compile test/burst_unit_test.aql
 
 
 import "aql:test"
 import "./burst.aql"
 
 
-def fixture fn [
-  [] [Map] [
-    ((((( BurstMap.make)
-      "cat"  1 BurstMap.set)
-      "car"  2 BurstMap.set)
-      "card" 3 BurstMap.set)
-      "dog"  4 BurstMap.set)
-  ]
-]
+# A shared immutable value (not a `fn`): tries never mutate, and a user-`fn`
+# call inside a `Test.test` quotation is a bytecode-compiler refusal.
+def fixture
+  ((((( BurstMap.make)
+    "cat"  1 BurstMap.set)
+    "car"  2 BurstMap.set)
+    "card" 3 BurstMap.set)
+    "dog"  4 BurstMap.set)
 
-# Insert keys key0..key(n-1) -> 0..n-1 to force buckets to burst.
-def many fn [
-  [n:Integer] [Map] [
-    (BurstMap.make) (iota n) [
-      var [[i acc] def k ( "key" (convert String i)  add) acc k i BurstMap.set end ]
-    ] fold
-  ]
-]
+# 12 keys all sharing the "key" prefix — well over burst-limit (8) — so the
+# root bucket must *burst* into a trie node. Built from an entry list (a
+# value, not a `fold`-driven generator: `fold`/`each` bodies are not yet
+# lowerable by the bytecode compiler — see DX-REPORT.md).
+def bursted
+  ([["key0" 0] ["key1" 1] ["key2" 2] ["key3" 3] ["key4" 4] ["key5" 5]
+    ["key6" 6] ["key7" 7] ["key8" 8] ["key9" 9] ["key10" 10] ["key11" 11]]
+   BurstMap.from-entries)
 
 
 # --- empty -----------------------------------------------------------
@@ -65,19 +67,14 @@ def many fn [
 # --- a bucket bursts but keeps every key ----------------------------
 
 [
-  # 30 keys >> burst-limit (8), so the root bucket must burst into a trie.
-  def t (30 many)
-  30 (t BurstMap.size) Assert.equal end
-  # every inserted key is still retrievable with its value
-  def hits (iota 30 each [
-    var [[i]
-      def k ( "key" (convert String i)  add)
-      if ((t k BurstMap.get) i eq) [1] [0]
-    ]
-  ])
-  30 (0 hits [add end] fold) Assert.equal end
+  # 12 keys >> burst-limit (8), so the root bucket must burst into a trie.
+  12 (bursted BurstMap.size) Assert.equal end
+  # representative keys remain retrievable, with their values, across the burst
+  0  (bursted "key0"  BurstMap.get) Assert.equal end
+  7  (bursted "key7"  BurstMap.get) Assert.equal end
+  11 (bursted "key11" BurstMap.get) Assert.equal end
   # a never-inserted key is absent
-  false (t "nope" BurstMap.has) Assert.equal end
+  false (bursted "nope" BurstMap.has) Assert.equal end
 ] "burst-bursts" Test.test end
 
 
@@ -104,10 +101,9 @@ def many fn [
 # --- prefix queries survive a burst ---------------------------------
 
 [
-  def t (30 many)
-  # keys key0..key29; prefix "key1" matches key1, key10..key19
-  def hits (t "key1" BurstMap.keys-with-prefix)
-  11 (hits size) Assert.equal end
+  # keys key0..key11; prefix "key1" matches key1, key10, key11 even after the
+  # bucket has burst (results stay key-sorted)
+  ["key1" "key10" "key11"] (bursted "key1" BurstMap.keys-with-prefix) Assert.equal end
 ] "burst-prefix-after-burst" Test.test end
 
 

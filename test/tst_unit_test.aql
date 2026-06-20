@@ -1,22 +1,24 @@
 # Ternary-search-tree tests using aql:test's imperative API.
 #
-# Run:
+# Runs identically under the interpreter, `aql check`, and the bytecode
+# compiler:
 #   aql test/tst_unit_test.aql
+#   aql check test/tst_unit_test.aql
+#   aql --force-compile test/tst_unit_test.aql
 
 
 import "aql:test"
 import "./tst.aql"
 
 
-def fixture fn [
-  [] [Any] [
-    ((((( TstMap.make)
-      "cat"  1 TstMap.set)
-      "car"  2 TstMap.set)
-      "card" 3 TstMap.set)
-      "dog"  4 TstMap.set)
-  ]
-]
+# A shared immutable value (not a `fn`): tries never mutate, and a user-`fn`
+# call inside a `Test.test` quotation is a bytecode-compiler refusal.
+def fixture
+  ((((( TstMap.make)
+    "cat"  1 TstMap.set)
+    "car"  2 TstMap.set)
+    "card" 3 TstMap.set)
+    "dog"  4 TstMap.set)
 
 
 # --- empty (an empty TST is `none`) ---------------------------------

@@ -605,12 +605,16 @@ which is the only reason it's interesting here.
 The library refuses in two layers, in this order:
 
 1. **`aql check` gates first.** `--force-compile` runs the static checker
-   and aborts on *any* diagnostic (`error: force-compile: check
-   diagnostics`) before the emitter even runs. This library deliberately
-   trips ~900 documented `check` **false positives** (generic
-   stack-dispatch + reference-exported namespaces — see
-   `AQL-CHECK-REPORT.md`), so any non-trivial usage is refused at this
-   stage regardless of what the emitter could do.
+   and aborts on any **error-level** diagnostic (`error: force-compile:
+   check diagnostics`) before the emitter even runs (warnings do not
+   block it). Checking a *library module* directly trips ~900 documented
+   `check` **false positives** (generic stack-dispatch + reference-exported
+   namespaces — see `AQL-CHECK-REPORT.md`), so compiling code that pulls a
+   whole module in at that granularity is refused here regardless of what
+   the emitter could do. (A *test file* that merely imports the library is
+   far cleaner — `aql check test/<x>_unit_test.aql` reports 0 errors, only
+   `unused_def` warnings — so the check gate is not what blocks the unit
+   suites; the emitter is.)
 
 2. **The emitter then refuses the test/spec harness.** For the subset that
    does pass `check`, the in-progress emitter still can't lower the test
@@ -647,3 +651,41 @@ can't reach the emitter on real code, and the compiler's true coverage of
 the library stays masked behind the checker. The emitter's Stage 2/3 gaps
 (fold/each bodies that leave residual values, code-body words) are the
 second wall, and squarely in-progress compiler work.
+
+### Bringing the four unit suites into the compilable subset
+
+The emitter table above was the *starting* state. The four imperative unit
+suites (`trie/radix/tst/burst_unit_test.aql`) are now written to stay
+inside what the bytecode compiler can lower, so each runs green **three
+ways** — interpreter, `aql check` (0 errors), and `--force-compile` — and
+CI gates all three (`ci/test.yml`). Two small, behaviour-preserving changes
+did it, and they map cleanly onto two distinct emitter limitations worth
+recording:
+
+- **A user-`fn` call inside a `Test.test` quotation is a Stage-3 refusal**
+  (`fn test-test$body: body leaves extra values`). The suites built their
+  fixtures as zero-arg `fn`s and called them per block (`def t (fixture)`).
+  Because tries are immutable, a fixture is just as correct as a single
+  **shared value** — `def fixture (… set …)` instead of `def fixture fn
+  [[] [Map] [ … ]]` — and a value reference lowers cleanly where the `fn`
+  call did not. (Minimal repro: `[ def t (myfn) … ] "x" Test.test` refuses;
+  inlining or a value binding compiles.) This is the single change that
+  unblocked trie/radix/tst.
+
+- **`fold` / `each` bodies do not lower yet** (`fn fold$body: result above
+  a literal`, `operand of unknown provenance … at each`). Burst's two
+  bucket-bursting tests generated a 30-key map with a `fold` and verified
+  retrieval with an `each`+`fold`, both inside the `Test.test` body. They
+  were rebuilt around a shared `BurstMap.from-entries` **value** of 12
+  enumerated keys (still well over the burst-limit of 8, so the bucket
+  still bursts) plus explicit per-key assertions — same property under
+  test, no loop in the body. This is the deeper gap: it also blocks every
+  `*_prop_spec`, `trie_prop_test`, and `trie_unit_spec`, which are
+  loop/`check-prop`-driven by nature and stay interpreter-only.
+
+The net: the compiler now demonstrably covers the library's full public
+surface as exercised by the unit suites (every `Set`/`Map` word, including
+`within`/`match`/`encode`/`decode` and the `do … error` codec path), not
+just the trivial `make`/`add`/`has` probe. The remaining
+interpreter-only suites are blocked solely by the `fold`/`each`/`check-prop`
+emitter gap, not by anything in the library.

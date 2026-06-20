@@ -26,6 +26,13 @@ there is verified against the pinned `aql` build.
   at least the imperative-unit + declarative-property pair. Each
   assertion-bearing suite ends by asserting `Test.fail-count` is `0` and prints
   `all green`.
+- The four imperative **unit** suites (`*_unit_test.aql`) are kept inside the
+  bytecode compiler's lowerable subset and CI gates each three ways:
+  interpreter, `aql check` (0 errors), and `aql --force-compile`. Keep them
+  that way — no user-`fn` call, `fold`, or `each` inside a `Test.test` body
+  (use a shared value fixture; see the fourth review in `DX-REPORT.md`). The
+  specs and property suites are loop/`check-prop`-driven and run on the
+  interpreter only.
 - Known AQL-runtime gotchas observed with the pinned build are in
   `dx-report.md`. The pinned aql commit is single-sourced in `.github/workflows/test.yml`
   (`AQL_REF`); a CI job fails if the hook or `api.json` drift from it.
