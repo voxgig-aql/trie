@@ -1,7 +1,7 @@
 # Standard-trie tests using aql:test's imperative API.
 #
 # Run:
-#   aql test/trie_test.aql
+#   aql test/trie_unit_test.aql
 
 
 import "aql:test"

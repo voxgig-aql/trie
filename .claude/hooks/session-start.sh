@@ -55,9 +55,9 @@ fi
 
 # Fast confidence check: run the smoke demo if aql is usable. Never fail the
 # session on a check error.
-if [ -x "$AQL" ] && [ -f "$CLAUDE_PROJECT_DIR/test/smoke.aql" ]; then
-  if ( cd "$CLAUDE_PROJECT_DIR" && "$AQL" test/smoke.aql >/dev/null 2>&1 ); then
-    log "Smoke check passed (aql test/smoke.aql)."
+if [ -x "$AQL" ] && [ -f "$CLAUDE_PROJECT_DIR/test/trie_smoke_test.aql" ]; then
+  if ( cd "$CLAUDE_PROJECT_DIR" && "$AQL" test/trie_smoke_test.aql >/dev/null 2>&1 ); then
+    log "Smoke check passed (aql test/trie_smoke_test.aql)."
   else
     log "NOTE: smoke check did not pass; toolchain may be incomplete."
   fi

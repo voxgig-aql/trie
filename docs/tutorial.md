@@ -9,6 +9,9 @@ repository checked out.
 
 Type the script into a file as we grow it, and run it after each step.
 
+> **AI agents:** for the calling convention and a verified cheat-sheet,
+> see [AGENTS.md](../AGENTS.md).
+
 ---
 
 ## Step 1 — import a variant and make a set

@@ -4,7 +4,7 @@ A record of what the AQL static checker (`aql check`) reports when run over this
 library, why those reports are **false positives** on this style of code, and
 what (if anything) would make the checker useful here. It backs the decision to
 wire `aql check` into CI as an **advisory, non-gating** step (`--soft` +
-`continue-on-error`) rather than a hard gate — see `ci/test.yml`.
+`continue-on-error`) rather than a hard gate — see `.github/workflows/test.yml`.
 
 Verified against `aql` commit `db828ec`. Every example below is **standalone**:
 copy it into a `.aql` file, then compare `aql check --soft file.aql` (the
@@ -36,7 +36,7 @@ correct. None of them corresponds to a real defect.
 | `burst.aql` | 197 | 82  | 27 | 7 | 1 |
 
 (Per-file counts from `aql check --soft <module>`. All four modules execute
-green across the full suite — see `ci/test.yml`.)
+green across the full suite — see `.github/workflows/test.yml`.)
 
 Two of these are *correctness* errors in the checker itself (`fn_body_error`,
 `branch_error`): it fails to parse or simulate code that the interpreter runs
@@ -55,7 +55,7 @@ aql check --soft trie.aql
 aql check --soft trie.aql radix.aql tst.aql burst.aql
 
 # Confirm the same code RUNS correctly:
-aql test/trie_test.aql      # ... "all green"
+aql test/trie_unit_test.aql      # ... "all green"
 ```
 
 `--soft` makes `check` exit `0` regardless of findings; without it, `check`

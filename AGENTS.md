@@ -3,7 +3,7 @@
 Guidance for an AI coding agent **using** this AQL trie library (in this repo or
 a downstream project) and **extending** it. Human docs: `README.md`, `docs/`
 (Diátaxis), full signatures in `docs/reference.md`, machine-readable API in
-`api.json`, design notes and AQL foot-guns in `DX-REPORT.md`.
+`api.json`, design notes and AQL foot-guns in `dx-report.md`.
 
 The four modules depend only on the **standard `aql:struct-util` module**
 (map enumeration + jsonic parse/serialise), which ships with the interpreter —
@@ -186,7 +186,7 @@ Build/locate `aql`, then run a scratch script or the suites:
 
 ```bash
 aql path/to/your_script.aql        # run your code
-aql test/smoke.aql                  # library smoke demo across all variants
+aql test/trie_smoke_test.aql                  # library smoke demo across all variants
 for f in test/*.aql; do aql "$f"; done   # full suite (each ends "all green")
 ```
 
@@ -198,7 +198,7 @@ and runs the smoke check, so a fresh session is ready to verify.
 
 ## Extending the library (contributors)
 
-Read `DX-REPORT.md` for the full account; the load-bearing AQL traps are:
+Read `dx-report.md` for the full account; the load-bearing AQL traps are:
 
 - **Children are computed-key Maps** (`{[k]: v}` literals, copy-returning
   `kids set (ch) child`, `StructUtil.items` enumeration — items is
@@ -263,5 +263,9 @@ Read `DX-REPORT.md` for the full account; the load-bearing AQL traps are:
   print per statement is robust.
 
 To add a variant: mirror an existing module's structure, export a `…Set` and a
-`…Map`, add `test/<variant>_test.aql` plus `test/<variant>_prop_spec.aql` (keep
-the trie-equivalence cross-check), and add the new suites to `ci/test.yml`.
+`…Map`, add `test/<variant>_unit_test.aql` plus `test/<variant>_prop_spec.aql`
+(keep the trie-equivalence cross-check), and add the new suites to `.github/workflows/test.yml`.
+Test files follow `<subject>_<unit|prop>_<test|spec>.aql`: `_test` = imperative
+(`Test.test`/`Test.check-prop`), `_spec` = declarative; the standard trie ships
+all four surfaces (`trie_unit_test`, `trie_unit_spec`, `trie_prop_test`,
+`trie_prop_spec`) as the reference, plus one `trie_smoke_test.aql`.

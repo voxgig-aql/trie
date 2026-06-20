@@ -1,0 +1,163 @@
+# Example-based unit tests for the standard trie — DECLARATIVE SPEC FORMAT.
+#
+# This file is the spec-format sibling of `test/trie_unit_test.aql`. Where
+# that file drives example checks imperatively (`Test.test` with
+# `Assert.equal`), this one expresses them as *data*: a list of `TestSpec`
+# values that `Test.run-spec` walks and dispatches. It mirrors how
+# `test/trie_prop_spec.aql` is the spec-format sibling of the direct-code
+# `test/trie_prop_test.aql`.
+#
+# A TestSpec is `{name, subject, cases, subs}`:
+#   - `subject` is the word to exercise, named as a dotted String
+#     (e.g. "TrieSet.with-prefix"); the runner splits it into `get` chains
+#     and dispatches the resolved word.
+#   - each case is `{name, in, out}`: the `in` list is spread onto the stack
+#     (deepest element first), the subject is dispatched, and the
+#     top-of-stack result is deep-compared (`deq`) against `out`.
+#
+# Tries are persistent, so the trie a case needs is built inline with the
+# forward-form constructor chain — `((TrieSet.make) k TrieSet.add)` returns
+# the next trie. Only the exported namespace words are used as subjects.
+#
+# Run:
+#   aql test/trie_unit_spec.aql
+
+
+import "aql:test"
+import "./trie.aql"
+
+
+# --- the spec suite, built as data ---------------------------------
+
+def specs [
+
+  # has: a stored key is a member; a bare prefix is not; an absent key is not.
+  {
+    name:    "has"
+    subject: "TrieSet.has"
+    cases: [
+      {
+        name: "stored-key-is-member"
+        in:   [ ((((TrieSet.make) "app" TrieSet.add) "apple" TrieSet.add) "apply" TrieSet.add) "app" ]
+        out:  true
+      }
+      {
+        name: "prefix-is-not-a-member"
+        in:   [ (((TrieSet.make) "apple" TrieSet.add) "apply" TrieSet.add) "ap" ]
+        out:  false
+      }
+      {
+        name: "absent-key"
+        in:   [ ((TrieSet.make) "apple" TrieSet.add) "ghost" ]
+        out:  false
+      }
+    ]
+    subs: []
+  }
+
+  # with-prefix returns every key under the prefix, sorted; [] when none match.
+  {
+    name:    "with-prefix"
+    subject: "TrieSet.with-prefix"
+    cases: [
+      {
+        name: "keys-under-app-sorted"
+        in:   [ ((((TrieSet.make) "apply" TrieSet.add) "app" TrieSet.add) "apple" TrieSet.add) "app" ]
+        out:  ["app" "apple" "apply"]
+      }
+      {
+        name: "no-match-is-empty"
+        in:   [ ((TrieSet.make) "apple" TrieSet.add) "z" ]
+        out:  []
+      }
+    ]
+    subs: []
+  }
+
+  # longest-prefix returns the longest stored key that prefixes the query.
+  {
+    name:    "longest-prefix"
+    subject: "TrieSet.longest-prefix"
+    cases: [
+      {
+        name: "car-prefixes-cartoon"
+        in:   [ (((TrieSet.make) "car" TrieSet.add) "card" TrieSet.add) "cartoon" ]
+        out:  "car"
+      }
+    ]
+    subs: []
+  }
+
+  # size counts distinct stored keys; keys returns them sorted.
+  {
+    name:    "size"
+    subject: "TrieSet.size"
+    cases: [
+      {
+        name: "three-keys"
+        in:   [ ((((TrieSet.make) "b" TrieSet.add) "a" TrieSet.add) "c" TrieSet.add) ]
+        out:  3
+      }
+    ]
+    subs: []
+  }
+
+  {
+    name:    "keys"
+    subject: "TrieSet.keys"
+    cases: [
+      {
+        name: "sorted"
+        in:   [ ((((TrieSet.make) "b" TrieSet.add) "a" TrieSet.add) "c" TrieSet.add) ]
+        out:  ["a" "b" "c"]
+      }
+    ]
+    subs: []
+  }
+
+  # map get returns the bound value; entries returns sorted [key value] pairs.
+  {
+    name:    "get"
+    subject: "TrieMap.get"
+    cases: [
+      {
+        name: "bound-value"
+        in:   [ (((TrieMap.make) "GET" 1 TrieMap.set) "POST" 2 TrieMap.set) "GET" ]
+        out:  1
+      }
+    ]
+    subs: []
+  }
+
+  {
+    name:    "entries"
+    subject: "TrieMap.entries"
+    cases: [
+      {
+        name: "sorted-pairs"
+        in:   [ (((TrieMap.make) "POST" 2 TrieMap.set) "GET" 1 TrieMap.set) ]
+        out:  [["GET" 1] ["POST" 2]]
+      }
+    ]
+    subs: []
+  }
+
+]
+
+
+# --- run every spec ------------------------------------------------
+
+def _ (specs each [
+  var [[s]
+    s Test.run-spec end
+    0
+  ]
+])
+
+
+# --- summary -------------------------------------------------------
+
+"---" print
+"fail count: " print Test.fail-count end print
+0 Test.fail-count end Assert.equal end
+"all green" print

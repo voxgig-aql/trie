@@ -13,7 +13,7 @@
 # budget.
 #
 # Run:
-#   aql test/trie_pbt.aql
+#   aql test/trie_prop_test.aql
 
 
 import "aql:test"
@@ -159,7 +159,7 @@ end
 
 "---" print
 "results:" print
-def all-results (Test.results)
+def all-results (Test.results end)
 def _print-results (all-results each [
   var [[r]
     def nm (r "name" get)
@@ -168,5 +168,6 @@ def _print-results (all-results each [
     0
   ]
 ])
-"fail count: " print (Test.fail-count) print
-0 (Test.fail-count) Assert.equal end
+"fail count: " print (Test.fail-count end) print
+0 (Test.fail-count end) Assert.equal end
+"all green" print

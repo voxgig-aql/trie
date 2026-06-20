@@ -1,7 +1,7 @@
 # Burst-trie tests using aql:test's imperative API.
 #
 # Run:
-#   aql test/burst_test.aql
+#   aql test/burst_unit_test.aql
 
 
 import "aql:test"

@@ -133,7 +133,7 @@ def specs [
 ]
 
 
-def _ (specs each [ var [[s] (s Test.run-property) report 0 ] ])
+def _ (specs each [ var [[s] (s Test.run-property end) report 0 ] ])
 
 
 # --- summary -------------------------------------------------------
