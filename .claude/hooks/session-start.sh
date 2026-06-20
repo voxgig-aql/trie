@@ -16,7 +16,7 @@ fi
 
 log() { echo "[session-start] $*" >&2; }
 
-AQL_REF=5aed3834d9cc1bd4fd1ea5ad5b5ef37f9c973574
+AQL_REF=d90fe1030ef58faba30aadf370990598939340cb
 BIN_DIR="$HOME/.local/bin"
 AQL="$BIN_DIR/aql"
 

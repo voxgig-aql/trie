@@ -7,7 +7,7 @@ a downstream project) and **extending** it. Human docs: `README.md`, `docs/`
 
 The four modules depend only on the **standard `aql:struct-util` module**
 (map enumeration + jsonic parse/serialise), which ships with the interpreter —
-no third-party dependencies. Verified against `aql` commit `5aed3834`.
+no third-party dependencies. Verified against `aql` commit `d90fe103`.
 
 ---
 
@@ -48,6 +48,21 @@ Each module is self-contained — vendor only the variant(s) you use.
   trailing `end`, or the **`/s` modifier**, which pins that call to stack args:
   `5 5 cmp/s 9` compares `5` and `5` (leaving `9`), whereas `5 5 cmp 9`
   forward-grabs the `9`.
+- **Don't "fully forward" a receiver-first call — and don't reach for `;` to do
+  it.** Mixed form (receiver before the word, trailing args forward —
+  `key slice 0 1`, `nd ch find-kid`, `acc pfx push`) is already the *maximum
+  safe* forward usage. Moving the receiver after the word (`slice key 0 1`,
+  `find-kid nd ch`) **silently changes results**: forward fills `sig[0]` first,
+  so operands **reverse** (`10 3 sub` is `7`, `sub 10 3` is `-7`); `get`/`set`
+  capture a *bare-word* container as an `Atom` literal key, not the variable
+  (`m "k" get` works, `get m "k"` does not); and a partial-arity native like
+  `slice` fires on the receiver alone (`slice key 0 1` returns the whole string,
+  stranding `0 1`). A terminator does **not** fix any of these — they are
+  arg-resolution, not over-grab. `;` (≡ `end`) earns its keep at a different
+  spot: **statement order**. Two adjacent value/side-effect statements with no
+  paren or barrier between them evaluate out of source order
+  (`5 print 6 print` prints `6` then `5`); `5 print ; 6 print` restores it.
+  That's why the demos run one `print end` per line.
 - **Tries are immutable.** `add` / `set` / `delete` return a *new* trie and
   leave the input unchanged — **always rebind the result**:
 
