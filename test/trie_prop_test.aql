@@ -31,8 +31,8 @@ def uniq fn [ [xs:List] [List] [ (xs TrieSet.from-keys) TrieSet.keys ] ]
 
 # Build a TrieMap binding each generated key to itself.
 def map-of fn [
-  [keys:List] [Map] [
-    (TrieMap.make) keys [
+  [ks:List] [Map] [
+    (TrieMap.make) ks [
       var [[k acc] acc k k TrieMap.set end ]
     ] fold
   ]
@@ -84,8 +84,8 @@ end
 Test.check-prop "keys-sorted-and-counted"
   [r.list-of [r.string charset 5] 12]
   [
-    var [[keys]
-      def t (keys map-of)
+    var [[ks]
+      def t (ks map-of)
       def ks (t TrieMap.keys)
       def s1 ((ks sort) ks list-eq)
       def s2 ((ks size) (t TrieMap.size) eq)
@@ -121,13 +121,13 @@ end
 Test.check-prop "delete-target-only"
   [r.list-of [r.string charset 5] 10]
   [
-    var [[keys]
-      def t (keys map-of)
-      def k (keys get 0)
+    var [[ks]
+      def t (ks map-of)
+      def k (ks get 0)
       def t2 (t k TrieMap.delete)
       def gone ((t2 k TrieMap.has) not)
       # any other distinct key is still present
-      def others (keys uniq)
+      def others (ks uniq)
       def survived (others each [
         var [[o] if (o k eq) [true] [t2 o TrieMap.has end] ]
       ])
@@ -144,11 +144,11 @@ end
 Test.check-prop "encode-has-size"
   [r.list-of [r.string charset 5] 8]
   [
-    var [[keys]
-      def t (keys map-of)
+    var [[ks]
+      def t (ks map-of)
       def enc (t TrieMap.encode)
       def n (t TrieMap.size)
-      `size:${n}` enc StringUtil.contains
+      enc `"size": ${n}` StringUtil.contains
     ]
   ]
   10 1 0

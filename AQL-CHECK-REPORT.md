@@ -10,6 +10,12 @@ Verified against `aql` commit `db828ec`. Every example below is **standalone**:
 copy it into a `.aql` file, then compare `aql check --soft file.aql` (the
 diagnostic) against `aql file.aql` (it runs correctly).
 
+> **Re-run at `958c379b` (2026-06-11):** the checker gained real teeth —
+> `uncalled_function` now catches this library's single costliest historical
+> bug shape — but the false-positive classes below persist and the
+> advisory-only decision stands. See the
+> [re-run section](#re-run-at-958c379b-2026-06-11) at the bottom.
+
 ---
 
 ## TL;DR
@@ -296,3 +302,106 @@ In rough priority order:
    removes Issue 4 and the early-halt in multi-file runs.
 5. **Demote unresolved generics to `info`**, not `error`, so `--soft` isn't the
    only way to keep exit codes meaningful.
+
+---
+
+## Re-run at `958c379b` (2026-06-11)
+
+The library was upgraded (and refactored — children are now computed-key
+Maps enumerated via `StructUtil.items`, and every namespace gained
+`decode`) and `aql check --soft` was re-run per module on the new code.
+(The standalone examples above were written at `db828ec`; to reproduce
+them today, rename their `node` bindings — `node` is now a reserved
+built-in word.)
+
+| Module | `no_signature` | `missing_returns` | `unused_def` | `fn_body_error` | `branch_error` | `undefined_word` | `mixed_form_call` (info) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `trie.aql`  | 128 | 70 | 34 | 0 | 1 | 1 | 19 |
+| `radix.aql` | 236 | 98 | 29 | 6 | 5 | 5 | 18 |
+| `tst.aql`   | 356 | 61 | 24 | 1 | 3 | 0 | 21 |
+| `burst.aql` | 193 | 93 | 26 | 7 | 1 | 6 | 20 |
+
+**What improved.** The checker gained three diagnostics with real teeth —
+and one of them, `uncalled_function`, is precisely the linter rule this
+library's DX report asked for. A wrong-arg-order namespace call is now
+flagged at the exact site, with the argument types it saw:
+
+```
+$ aql check --soft wrongorder.aql
+check: [error] uncalled_function: call to 'map-get' matched no signature
+       and was left on the stack as data (arguments: ProperString, Map)
+```
+
+This catches the single costliest bug shape in the library's history (the
+silently-undispatched namespace word). The companion runtime check (an
+`[aql/uncalled_function]` raise at the end-of-run drain) covers leftover
+residue, though a *consumed* residue — the original symptom, where `print`
+interpolates the function value — is still runtime-silent; the checker is
+the tool that sees it. Reason enough to keep running `aql check` on every
+change even though it cannot gate.
+
+**What's unchanged.** All five false-positive classes from the original
+report persist on this code, in similar volume — `no_signature` on every
+`Any`-typed `get`/fold shape (tst's count *grew* with the engine's richer
+candidate exploration), `missing_returns` for core words without declared
+`Returns`, `unused_def` for every `/r` reference-export, `fn_body_error`
+on bodies the runtime parses fine, and the `branch_error` cascade. The
+multi-file invocation still halts early (`check: (empty stack)`, reporting
+~134 errors where per-file runs find ~900), so per-file runs remain the
+accurate measure.
+
+**New noise, small.** Two additions on the noise side of the ledger:
+
+- `undefined_word` errors (1–6 per module) on names the runtime resolves
+  fine: a constructor parameter referenced inside a `do {…}` quotation
+  (`kids` in `mk-node`), a `def` local inside an `if` arm (`midkids`), and
+  the mutually-recursive `b-burst`/`b-insert` pair. All false.
+- `mixed_form_call` info advisories (~20 per module) recommending the
+  all-forward form for three-plus-argument calls that mix stack and
+  forward collection. On this codebase that shape is the deliberate
+  receiver-first convention (`t key val …`), so the advisories are noise
+  here — but info-severity noise, which is the right severity.
+
+**Verdict unchanged.** With ~900 error-level diagnostics across four
+modules that the full suite proves correct, there is still no
+configuration that yields a gateable true-positive set. CI keeps the
+advisory `--soft` + `continue-on-error` step. Of the original wishlist,
+item 5's spirit arrived (`mixed_form_call` ships as info, not error), and
+`uncalled_function` is a genuine, load-bearing win; items 1–4 (trace `/r`
+exports, core `Returns`, `Any`-unification, body re-parser) remain the
+gap between "advisory" and "gate".
+
+## Re-run at `5aed3834` (2026-06-18)
+
+Re-run per module on the migrated code (the `keys`-list bindings are now
+`ks`; reproduce the standalone examples above by renaming their `node`
+bindings *and* any `keys`/`vals` ones — all reserved core words now).
+First run at `7193a7d3`; re-confirmed byte-identical at the `5aed3834`
+re-pin (the in-progress bytecode compiler did not move `check`'s output —
+same positions, same class histogram, `uncalled_function` intact).
+
+**What improved: positions.** Every diagnostic now carries a `row:col`
+and an explicit `[info]`/`[warning]`/`[error]` severity —
+`check: 76:68: [error] no_signature: …` where the round-2 output was
+often position-less (`--> source position unknown`). For a tool you skim
+by eye in CI logs, that is the single most useful change this window; it
+turns "somewhere in radix.aql" into a clickable site.
+
+**What's unchanged: the false positives.** Same five classes, same
+character, similar volume — `no_signature` on every `Any`-typed
+`get`/fold shape (101 in `trie.aql`), `unused_def` still on all the `/r`
+reference-exports (35 — the checker still can't trace reference-export),
+`missing_returns` on core words without declared `Returns` (20),
+`undefined_word` (1–6, on `do {…}`-quotation params and mutually-recursive
+pairs), and the `mixed_form_call` *info* advisories (~47, on the
+deliberate receiver-first convention). The multi-file invocation still
+halts early, so per-file runs remain the accurate measure.
+`uncalled_function` still fires on a wrong-order namespace call — the
+load-bearing win is intact.
+
+**Verdict unchanged.** Positions make the advisory output materially
+easier to act on, but the gate-vs-advisory math is the same: items 1–4 of
+the original wishlist (trace `/r` exports, core `Returns`, `Any`-
+unification, a body re-parser) are still what stand between this output
+and a gateable true-positive set. CI keeps the `--soft` +
+`continue-on-error` step.

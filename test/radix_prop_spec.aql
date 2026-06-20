@@ -25,23 +25,14 @@ def starts-with fn [
 ]
 
 def radix-of fn [
-  [keys:List] [Map] [
-    (RadixSet.make) keys [ var [[k acc] acc k RadixSet.add end ] ] fold
+  [ks:List] [Map] [
+    (RadixSet.make) ks [ var [[k acc] acc k RadixSet.add end ] ] fold
   ]
 ]
 
 def trie-of fn [
-  [keys:List] [Map] [
-    (TrieSet.make) keys [ var [[k acc] acc k TrieSet.add end ] ] fold
-  ]
-]
-
-# Element-wise list equality (AQL `eq` on lists is identity, not deep).
-def list-eq fn [
-  [a:List b:List] [Boolean] [
-    if (((a size) (b size) eq) not) [false] [
-      true (iota (a size)) [ var [[i acc] acc ((a get (i)) (b get (i)) eq) and ] ] fold
-    ]
+  [ks:List] [Map] [
+    (TrieSet.make) ks [ var [[k acc] acc k TrieSet.add end ] ] fold
   ]
 ]
 
@@ -91,17 +82,17 @@ def specs [
   # 4. all inserted keys present.
   (Test.prop "bulk-all-present"
     [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 1 15) ]
-    [ var [[keys]
-        def s (keys radix-of)
-        (keys each [ var [[k] s k RadixSet.has end ] ]) all end
+    [ var [[ks]
+        def s (ks radix-of)
+        (ks each [ var [[k] s k RadixSet.has end ] ]) all end
     ] ])
 
   # 5. prefix soundness.
   (Test.prop "prefix-sound"
     [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 1 15) ]
-    [ var [[keys]
-        def s (keys radix-of)
-        def p (keys get 0)
+    [ var [[ks]
+        def s (ks radix-of)
+        def p (ks get 0)
         def hits (s p RadixSet.with-prefix)
         hits p all-have-prefix
     ] ])
@@ -109,9 +100,9 @@ def specs [
   # 6. delete removes exactly one.
   (Test.prop "delete-removes-one"
     [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 2 15) ]
-    [ var [[keys]
-        def s (keys radix-of)
-        def k (keys get 0)
+    [ var [[ks]
+        def s (ks radix-of)
+        def k (ks get 0)
         def before (s RadixSet.size)
         def s2 (s k RadixSet.delete)
         def gone ((s2 k RadixSet.has) not)
@@ -123,10 +114,10 @@ def specs [
   #    same sorted key list. Compression must be behaviour-preserving.
   (Test.prop "radix-matches-trie"
     [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 1 20) ]
-    [ var [[keys]
-        def r (keys radix-of)
-        def t (keys trie-of)
-        (r RadixSet.keys) (t TrieSet.keys) list-eq
+    [ var [[ks]
+        def r (ks radix-of)
+        def t (ks trie-of)
+        (r RadixSet.keys) (t TrieSet.keys) deq
     ] ])
 
   # 8. longest-prefix over nested keys returns the longest stored prefix.

@@ -48,7 +48,8 @@ extra map words on the right). `Xxx` is any of the eight namespaces.
 | `t Xxx.values` / `Xxx.entries` *(map)* | all values / `[key, value]` pairs |
 | `t Xxx.size` / `Xxx.height`   | key count / structural depth |
 | `keys Xxx.from-keys` *(set)* / `entries Xxx.from-entries` *(map)* | rebuild a trie from extracted data (inverse of `keys`/`entries`) |
-| `t Xxx.encode`                | jsonic-style snapshot string |
+| `t Xxx.encode`                | JSON snapshot string |
+| `s Xxx.decode`                | rebuild a trie from an `encode` snapshot (raises on a wrong-kind payload) |
 
 The standard trie additionally offers two **advanced queries**:
 `t query k TrieSet.within` (fuzzy / edit-distance search) and

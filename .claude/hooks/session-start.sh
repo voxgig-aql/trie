@@ -16,7 +16,7 @@ fi
 
 log() { echo "[session-start] $*" >&2; }
 
-AQL_REF=db828ecb6ee1d161ff177134478f42c56484f051
+AQL_REF=d90fe1030ef58faba30aadf370990598939340cb
 BIN_DIR="$HOME/.local/bin"
 AQL="$BIN_DIR/aql"
 
@@ -26,8 +26,11 @@ if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
 fi
 export PATH="$BIN_DIR:$PATH"
 
-if command -v aql >/dev/null 2>&1 || [ -x "$AQL" ]; then
-  log "aql already present ($("$AQL" -version 2>/dev/null || aql -version 2>/dev/null)); skipping build."
+# A cached binary from an earlier session may predate a pin bump, so the skip
+# is version-aware: rebuild unless the reported version matches AQL_REF.
+have_ver="$("$AQL" -version 2>/dev/null || aql -version 2>/dev/null || true)"
+if [ -n "$have_ver" ] && [ "${have_ver#aql }" = "$AQL_REF" ]; then
+  log "aql already present ($have_ver); skipping build."
 else
   if ! command -v go >/dev/null 2>&1; then
     log "WARNING: Go toolchain not found; cannot build aql. Install Go, or build aql manually (see docs/how-to.md)."

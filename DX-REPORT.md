@@ -15,6 +15,17 @@ writing AQL data structures and to the language authors.
 > `aql:string-util`, the test module is now `Test.*`/`Assert.*`, and `base`
 > joined the reserved words — none a language *fault*, just churn to track.
 
+> **Postscript 2 (upgraded to `958c379b`, 2026-06-11).** The language team
+> verified this report item by item (their `design/VOXGIG-DX-REPORT.5.md`)
+> and shipped fixes for nearly all of it — silent dispatch is now loud, maps
+> take computed keys (the association-list workaround is retired from this
+> library), `filter` takes quotations, `raise` and an in-memory `parse`
+> exist (this library now ships `decode`), structural `deq` landed, and the
+> HAMT case study's `popcount`/`insert-at`/`remove-at` asks all shipped.
+> The full issue-by-issue accounting, the refactor this enabled, and the
+> handful of *new* papercuts found during this upgrade are at the bottom:
+> [Second upgrade review](#second-upgrade-review-958c379b-2026-06-11).
+
 The headline: AQL is genuinely capable of expressing persistent, recursive
 data structures cleanly, and once the idioms are in hand the code reads
 well. Getting the idioms in hand, though, took a lot of empirical probing,
@@ -316,3 +327,252 @@ friction was almost entirely in *discovering* the idioms, not in expressing
 the algorithms — and nearly every hour lost went to a behaviour that failed
 quietly instead of loudly. Louder failures and a handful of docs notes would
 turn a sometimes-bewildering experience into a smooth one.
+
+---
+
+## Second upgrade review (`958c379b`, 2026-06-11)
+
+This library was re-verified and refactored against `aql` `958c379b` —
+110 commits past the previous `db828ec` pin. The language team had
+re-verified this report item by item against their `main` (see
+`design/VOXGIG-DX-REPORT.5.md` and `design/VOXGIG-AQL-REPORTS.5.md` in the
+aql repo) and shipped a remarkable amount of it. Everything below was then
+confirmed first-hand while upgrading: every status is backed by this repo's
+suites running green at the new pin, or by a minimal probe.
+
+### The original sharp edges, re-scored
+
+| # | Issue (2026-06-01) | Status at `958c379b` | Done here |
+|---|---|---|---|
+| 1 | Namespace dispatch type-miss fails **silently** | ✅ **fixed** — the runtime raises `[aql/uncalled_function]` at the end-of-run drain with the call-site span; `aql check` also flags `uncalled_function` and a `forward_strands_operand` advisory | nothing to change — the costliest trap in this report is gone |
+| 2 | `fold` binds `[element accumulator]` | 📖 documented upstream (`describe fold` + REFERENCE callout); behaviour unchanged | fold bodies untouched |
+| 3 | `merge` is a deep, index-wise merge | 🟠 still deep *by design*, but `merge` **left core** (now `StructUtil.merge`) and `StructUtil.setpath` is the copy-returning one-field update | nodes still rebuilt with `mk-*` constructors |
+| 4 | `do {…}` evaluated map values as code | ✅ stayed fixed | — |
+| 5 | `eq` on lists is identity | 📖 by design, documented — and structural **`deq`** landed | the prop suites' hand-rolled `list-eq` helper is deleted; cross-variant checks use `deq` |
+| 6 | `xs get i` returns `none` | 📖 redefined as intentional JS-like semantics: bare word = literal key (`.key`), parenthesised = computed (`[expr]`); documented | code already used `get (i)` |
+| 7 | Reserved binding names (`node`, `eq`, `L`, …) | 🟠 **mostly relaxed** (`eq`, `L`, single capitals now bind fine) — but **`node` became reserved again** as a built-in word of the new Flex-container work, which broke every module in this library at call time | all node bindings renamed to `nd` |
+| 8 | Interpolation fragile in recursive calls | ✅ fixed — recursive `` `${…}` `` expands correctly | kept (collectors still interpolate paths) |
+
+### The papercuts (#9), re-scored
+
+- **Maps with computed keys** — ✅ **fixed, and it reshaped this library.**
+  `{[k]: v}` literals evaluate the key; `set` on a Map is **copy-returning**
+  (`{a:1} set (k) 2` leaves the receiver untouched — verified); and
+  `StructUtil.items` enumerates entries as **key-sorted** `[k v]` pairs
+  regardless of insertion order. The association-list workaround is retired:
+  the standard trie's children, the radix tree's edges (keyed by first
+  character — the radix invariant makes that unique), and the burst trie's
+  spine are all real maps now. A free consequence of sorted enumeration:
+  every traversal emits keys in lexicographic order *by construction*, so the
+  listing words dropped their trailing `sort`s, and `entries` is collected in
+  one walk instead of a keys-walk plus per-key lookups. Residuals: there is
+  **no key-removal word** (delete still rebuilds the children from `items`,
+  same O(n) as the old list splice), and each `set` copies the map — the
+  native persistent map (HAMT Level B below) remains the perf answer.
+- **`filter` wants a `Function`** — ✅ fixed: `filter` takes a `[…]` quotation
+  (var-destructure bodies included). Adopted for the burst bucket scans.
+  Keep-folds remain only where the predicate needs the accumulator.
+- **Forward-arg edges / print order** — top-level print order now matches
+  source order, and `import` without `end` is fine again under the lazy
+  structure-first resolution engine. The one survivor: **chained sibling
+  prints still reverse** (`"a" print (x) print`), so the smoke demo keeps one
+  `end`-terminated print per statement.
+- **No custom error raising** — ✅ fixed: `raise "message"` raises a
+  catchable error (`do […] error […]`). Adopted: `decode` raises on a
+  wrong-kind payload. *New papercut:* in the handler, `e "message" get`
+  **prints** like the message but is not a plain `String` — it has `size` 0
+  and is not `eq` to the equal-looking literal; pass it through
+  `convert String` before comparing.
+- **No in-memory jsonic parser** — ✅ fixed: `StructUtil.parse` decodes
+  jsonic/JSON text (loud `parse_error` on garbage), `Vm.parse` parses AQL
+  source. Adopted: every namespace now ships **`decode`**, the true inverse
+  of `encode`, closing the round-trip this report asked for. Two *new
+  papercuts* found wiring it up:
+  1. String-interpolating a payload (`` `${payload}` ``) is **not** a
+     serialiser: a contained `none` renders as `None({})`, which `parse`
+     does not read back. `StructUtil.jsonify` is the matched pair (`none` →
+     JSON `null`), so `encode` switched from interpolation to `jsonify`.
+  2. `parse` hydrates JSON `null` to a none that is `eq`/`deq`-equal to the
+     `none` literal but **`Assert.equal` still distinguishes them**
+     (`expected None, got none`). Tests assert that one case via `eq`.
+- **Generator order/charset sensitivity** — not retested (the single-value
+  generators kept working); unchanged note.
+
+### HAMT case study, revisited
+
+Level A is now unblocked exactly as the case study asked: **`popcount`
+landed** (`BinUtil.popcount`, alongside `clz`/`ctz`/`bitlen`/`mask`/…) and
+**`insert-at`/`remove-at` landed** (`ArrayUtil`, copy-returning, loud on
+out-of-range). A correct persistent HAMT is now a reasonable pure-AQL
+exercise — it would slot in as a fifth variant behind the same `…Set`/`…Map`
+surface (hash the key, bit-slice with `bsr`/`band`, index the packed child
+list by `popcount(bitmap & (bit-1))`). What this library does *not* get from
+it today is the payoff: Level B (mutable unboxed fixed-width arrays /
+layout guarantees / a native persistent map) is unchanged, so a pure-AQL
+HAMT would be a demonstration, not a speedup. The new `FlexMap`/`FlexList`
+mutable Node containers and constructible `make Array` inch toward the
+transient story, but the layout guarantees that make a HAMT *fast* are
+still a runtime decision. Unchanged conclusion: worth doing when a native
+persistent map ships, or as an expressiveness showcase.
+
+### Breaking changes hit during this upgrade
+
+None of these are language *faults*; all are churn a downstream consumer
+should expect to track on an unpinned `main`:
+
+| Change | Effect here |
+|---|---|
+| `node` is a reserved built-in word | every module failed at call time (`[aql/reserved_word]`); bindings renamed to `nd` |
+| `aql:string-util` went **subject-last** | the pbt suite's stack-form `StringUtil.contains` silently flipped to needle-vs-needle; call rewritten (haystack pushed first) |
+| `merge` moved out of core into `aql:struct-util` | no effect (this library never merges nodes — see #3) |
+| `refine Object` removed (class/object split) | no effect (never used here) |
+| Digit-led stack words renamed (`2dup` → `dup2`, …) | no effect (never used here) |
+| Map/structure print form changed (jsonic single-quote style) | the pbt `encode`-shape property updated along with the `jsonify` switch |
+
+### Suggestions from the original report, all four accounted for
+
+1. **Surface silent dispatch failures** — ✅ shipped (runtime
+   `uncalled_function` + three new `aql check` diagnostics).
+2. **A shallow field-update word** — ✅ resolved as `StructUtil.setpath`
+   (an `assoc`/`with` alias was explicitly rejected as duplication — fine).
+3. **Document the gotchas** — ✅ landed as a docs batch (fold order, merge
+   depth, `eq` vs `deq`, literal-vs-computed `get` keys, ADR-004
+   forward-by-default, upgrade notes).
+4. **A jsonic string parser** — ✅ shipped (`StructUtil.parse`).
+
+That is a 100% hit rate on the priority list, plus the HAMT asks. The two
+silent-failure mechanisms that dominated the original report are both loud
+now; what remains open upstream is minor (chained-print ordering) or
+explicitly deferred runtime work (native persistent map). The new
+papercuts found this round — `node` re-reserved, the not-a-String error
+message, interpolation-vs-jsonify for `none`, hydrated-null vs
+`Assert.equal` — are exactly the kind of small, silent asymmetries this
+report exists to flag, and none cost more than minutes against a pinned,
+tested upgrade.
+
+## Third upgrade review (`5aed3834`, 2026-06-18)
+
+Migrated against `aql` `7193a7d3` — 39 commits past `958c379b` — then
+re-verified and re-pinned at `5aed3834`, a *further* 298 commits on. That
+second jump is dominated by an in-progress **bytecode compiler** (the
+newest commit is a "checker/bytecode-compiler architecture review and
+plan"); all ten suites run green at `5aed3834`, so it is compatible, but
+the pin now tracks a mid-refactor HEAD rather than a settled point. The
+headline of the migration window is the **native map-iteration work**
+(`each`/`for-each`/`fold`/`filter` gained Map overloads, the `KeyVal` entry
+type landed, and `keys`/`vals` became core words), plus a batch of DX fixes
+the language team shipped in response to a *different* consumer's report
+(`voxgig-aql/decision/dx-report.md`) — several of which also close
+papercuts this library logged in round 2. Every status below is backed by
+this repo's ten suites running green at the pin, or a minimal probe.
+
+### The one breaking change here
+
+| Change | Effect here |
+|---|---|
+| `keys` and `vals` became reserved core words (native map columns); `has`, `scan`, `canon` also now reserved | only **`keys`** collided — it was this library's binding name for a key list in `build-from-keys`/`set-from-keys` and the variant equivalents (plus `[[keys …]]` destructures in the property suites). Renamed every such *binding* to **`ks`**; the public API names (`TrieSet.keys`, the `keys:` field in `encode` payloads) are map keys, not bindings, and are untouched. Same churn class as round 2's `node`→`nd`, and just as loud (`[aql/reserved_word]` at bind time). `val` is **not** reserved — only the plural `vals` — so the pervasive `val` field/binding survived. |
+
+That was the *entire* migration: no behavioural change, no logic touched,
+suites green after a mechanical rename.
+
+**The native map words are NOT an adoption target — a corrected finding.**
+An earlier draft of this report floated retiring the `StructUtil.items`-fold
+idiom in favour of native `keys`/`vals`/map-`fold`, the way round 2 retired
+association lists. On inspection that is **unsafe**: native map iteration
+(`each`/`for-each`/`fold`/`filter`/`keys`/`vals`) walks entries in
+**insertion order**, whereas this library's sorted-output guarantee (rule 4)
+comes from `StructUtil.items`, which **sorts**. On a `set`-built node map
+`{c:3,a:1,b:2}` the split is stark — `StructUtil.items` →
+`[["a",1],["b",2],["c",3]]` (sorted, what the collectors walk) but
+`keys`/`vals` → `["c","a","b"]`/`[3,1,2]` (insertion). They are not
+interchangeable, and `m sort` plus a native word is two steps where
+`StructUtil.items` is one: no simplification, only a sorting hazard. So the
+idiom stays — `StructUtil.items` is the right, minimal tool — and the trap
+is now a documented foot-gun (AGENTS.md), because insertion-order map words
+that *look* like a clean modernisation are exactly what a future contributor
+would reach for. (Curiosity worth flagging upstream: a map **literal**
+`{c:3,a:1,b:2}` still prints key-sorted while the `set`-built equivalent
+prints in insertion order — the same value canonicalises two ways depending
+on construction path.)
+
+### Round-2 papercuts, re-scored
+
+| Papercut (round 2) | Status at `7193a7d3` |
+|---|---|
+| `e "message" get` is **not a String** (size 0, not `eq` to the literal) | ✅ **fixed** — it is now a genuine `String` (`eq` to the literal, correct `size`), part of the do/error stack-neutrality work. The `convert String` guard in this library's `decode` tests is now a harmless no-op, kept for back-compat. |
+| Interpolating a payload renders `none` as `None({})`, unreadable by `parse` | 📖 unchanged **by design** — `StructUtil.jsonify` remains the matched serialiser (`none` → JSON `null`); `encode` already uses it. |
+| A `parse`-hydrated `null` is `eq`/`deq`-equal to `none` but `Assert.equal` distinguishes it | 🟠 **persists** — re-probed: `eq`/`deq` both `true`, yet `Assert.equal none hydrated` still raises `expected None, got none` (the value now renders lowercase, from `2a632eef`, but the assert-vs-eq asymmetry stands). Tests still assert that one case via `eq`. |
+| Chained sibling prints reverse (`"a" print (x) print`) | 🟠 **persists** — the two-phase forward-collection model was *documented* (`design/FORWARD-COLLECTION-PHASES.10.md`) but the reversal is unchanged; the smoke demo keeps one `end`-terminated print per statement. |
+| `node` re-reserved | 🟠 still reserved, now with company (`keys`/`vals`/`has`/`scan`/`canon`). |
+
+### DX improvements that landed this window
+
+- **`do`/`error` is stack-neutral.** The error branch now leaves *exactly*
+  the handler's result — any residue the `do` block pushed before raising
+  (or the caught error itself, if the handler ignores it) is stripped,
+  mirroring the success pass-through. Verified. Directly relevant to
+  `decode`'s `do […] error […]` guard.
+- **Errors carry location across an import boundary.** An error raised
+  inside an imported `fn` now renders with the *module* file's name, line,
+  and caret (`--> /path/mod.aql:row:col`) instead of losing its position —
+  exactly the fidelity entry-file errors already had. This matters because
+  the whole library is consumed via `import`; a downstream `decode` raise
+  now points into `trie.aql`, not nowhere.
+- **Swapped-argument hint.** When a dispatch fails but the argument tuple
+  matches a signature under a permutation, the error now says "one exists
+  for (String, Map) — did you swap the arguments?" instead of the
+  misleading forward-grouping hint. Complements the round-2
+  `uncalled_function` work as the second half of the "loud dispatch
+  failure" story.
+- **Core `has` word.** A total presence predicate (`Boolean`, `false` on
+  missing key / out-of-range / `none` parent) across Map/List/record/Array
+  — the general form of this library's namespace `has`, and the clean way
+  to distinguish absent from present-with-`none` (rule 5) in any consumer
+  code that touches raw nodes.
+- **Flex writes ADOPT.** A plain Map/List stored into a flex container is
+  now deep-copied to flex (so a later write through it sticks — the old
+  "mixed tree" silently-lost-write bug, `e2abf68d`); a flex value stored
+  into a flex container is *shared* by reference; a value stored into a
+  plain container is snapshotted immutable. Verified all three. This makes
+  the flex-transient build pattern robust without hand-`flex`-ing every
+  child — strengthening the "FlexMap is the transient twin" half of the
+  persistent-map discussion below.
+- **`canon` word** — round-trippable canonical AQL source for any value
+  (`{end:false kids:{a:1} val:none}`). An alternative to this library's
+  JSON-targeted `encode`; not adopted (we want portable JSON text), but a
+  clean inspection/snapshot tool.
+- **`aql check` gained positions.** Diagnostics now carry `row:col` and an
+  explicit `[info]`/`[warning]`/`[error]` severity (the round-2 re-run
+  complained of position-less reports). The false-positive *classes* and
+  *volume* are unchanged, so the advisory-only verdict stands — see the
+  check report's round-3 note.
+
+### The standing asks (from the persistent-map design review)
+
+A separate design thread this round stress-tested whether the runtime's
+mutable containers close the long-standing "every Map `set` is a full
+copy" ceiling. They do not — but they sharpened the ask:
+
+1. **A native persistent Map** (CHAMP/HAMT behind the *existing*
+   copy-returning `set` — a representation swap, not a new type or
+   semantics) remains the headline performance ask. Map's contract is
+   already persistence-shaped; only the cost model is wrong (O(n) copy per
+   `set`, which makes the idiomatic `fold`-build O(n²) — measured 4.4 s for
+   4 000 entries vs 0.47 s for the in-place flex equivalent). Keys are
+   string-only and every surface enumeration (`print`, `jsonify`,
+   `StructUtil.items`) is already key-sorted, so hash order would stay
+   unobservable — the swap is invisible to every existing program.
+2. **An `inflex` / O(1) seal** is the cheap companion ask: today `node`
+   (the flex→immutable freeze) is a deep copy, so a userland persistent
+   structure built on flex transients pays an O(size) seal at the API
+   boundary, erasing the win. An ownership-transfer seal (Clojure's
+   `persistent!`: flip an edit bit, invalidate stale writers) plus a
+   transitively-contains-flex purity bit would make the seal O(1) and
+   legitimise userland persistent structures — smaller than shipping CHAMP,
+   and exactly the word a CHAMP-with-transients API would want anyway. The
+   flex-adopt work above is adjacent but does not provide it.
+
+Neither blocks this library — tries are narrow-fanout, so copy-returning
+`set` copies little, and the data words (`from-keys`/`from-entries`) batch
+the build. They are upstream wishes, logged here because this is the report
+the language team reads.

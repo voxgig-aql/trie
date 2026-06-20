@@ -33,8 +33,8 @@ def starts-with fn [
 
 # Build a TrieSet from a list of keys.
 def set-of fn [
-  [keys:List] [Map] [
-    (TrieSet.make) keys [
+  [ks:List] [Map] [
+    (TrieSet.make) ks [
       var [[k acc] acc k TrieSet.add end ]
     ] fold
   ]
@@ -44,15 +44,6 @@ def set-of fn [
 def all-have-prefix fn [
   [p:String xs:List] [Boolean] [
     (xs each [ var [[x] x p starts-with ] ]) all end
-  ]
-]
-
-# Element-wise list equality (AQL's `eq` on lists is identity, not deep).
-def list-eq fn [
-  [a:List b:List] [Boolean] [
-    if (((a size) (b size) eq) not) [false] [
-      true (iota (a size)) [ var [[i acc] acc ((a get (i)) (b get (i)) eq) and ] ] fold
-    ]
   ]
 ]
 
@@ -104,27 +95,27 @@ def specs [
   # 4. every inserted key is present afterwards (bulk no-false-negatives).
   (Test.prop "bulk-all-present"
     [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 1 15) ]
-    [ var [[keys]
-        def s (keys set-of)
-        (keys each [ var [[k] s k TrieSet.has end ] ]) all end
+    [ var [[ks]
+        def s (ks set-of)
+        (ks each [ var [[k] s k TrieSet.has end ] ]) all end
     ] ])
 
   # 5. size never exceeds the number of inserted keys (it equals the
   #    distinct count; duplicates collapse).
   (Test.prop "size-bounded-by-inserts"
     [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 1 15) ]
-    [ var [[keys]
-        def s (keys set-of)
-        (s TrieSet.size) (keys size) lte
+    [ var [[ks]
+        def s (ks set-of)
+        (s TrieSet.size) (ks size) lte
     ] ])
 
   # 6. prefix soundness: everything keys-with-prefix returns really does
   #    start with that prefix.
   (Test.prop "prefix-sound"
     [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 1 15) ]
-    [ var [[keys]
-        def s (keys set-of)
-        def p (keys get 0)
+    [ var [[ks]
+        def s (ks set-of)
+        def p (ks get 0)
         def hits (s p TrieSet.with-prefix)
         hits p all-have-prefix
     ] ])
@@ -132,9 +123,9 @@ def specs [
   # 7. after deleting a key it is gone, and the set shrinks by exactly one.
   (Test.prop "delete-removes-one"
     [ r.list-of [ r.string charset (r.int 1 8) ] (r.int 2 15) ]
-    [ var [[keys]
-        def s (keys set-of)
-        def k (keys get 0)
+    [ var [[ks]
+        def s (ks set-of)
+        def k (ks get 0)
         def before (s TrieSet.size)
         def s2 (s k TrieSet.delete)
         def gone ((s2 k TrieSet.has) not)
@@ -146,28 +137,28 @@ def specs [
   #    The query is an actual key, so the result is never empty.
   (Test.prop "within-subset"
     [ r.list-of [ r.string charset (r.int 1 6) ] (r.int 1 12) ]
-    [ var [[keys]
-        def s (keys set-of)
-        def hits (s (keys get 0) 2 TrieSet.within)
+    [ var [[ks]
+        def s (ks set-of)
+        def hits (s (ks get 0) 2 TrieSet.within)
         hits s all-members
     ] ])
 
   # 9. within 0 of a stored key is exactly that key.
   (Test.prop "within-zero-is-exact"
     [ r.list-of [ r.string charset (r.int 1 6) ] (r.int 1 12) ]
-    [ var [[keys]
-        def s (keys set-of)
-        def q (keys get 0)
+    [ var [[ks]
+        def s (ks set-of)
+        def q (ks get 0)
         def z (s q 0 TrieSet.within)
-        z ([] q push) list-eq
+        z ([] q push) deq
     ] ])
 
   # 10. wildcard soundness: every key matching a pattern is a real member.
   (Test.prop "match-subset"
     [ r.list-of [ r.string charset (r.int 1 6) ] (r.int 1 12) ]
-    [ var [[keys]
-        def s (keys set-of)
-        def pat ( (keys get 0) "*"  add)
+    [ var [[ks]
+        def s (ks set-of)
+        def pat ( (ks get 0) "*"  add)
         def hits (s pat TrieSet.match)
         hits s all-members
     ] ])
@@ -175,10 +166,10 @@ def specs [
   # 11. from-keys round-trips: rebuilding from extracted keys is identical.
   (Test.prop "from-keys-roundtrip"
     [ r.list-of [ r.string charset (r.int 1 6) ] (r.int 1 12) ]
-    [ var [[keys]
-        def viaadd  ((keys set-of) TrieSet.keys)
-        def viafrom ((keys TrieSet.from-keys) TrieSet.keys)
-        viaadd viafrom list-eq
+    [ var [[ks]
+        def viaadd  ((ks set-of) TrieSet.keys)
+        def viafrom ((ks TrieSet.from-keys) TrieSet.keys)
+        viaadd viafrom deq
     ] ])
 
 ]

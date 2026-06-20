@@ -207,6 +207,37 @@ def fixture fn [
 ] "from-data" Test.test end
 
 
+# --- encode/decode round-trip ----------------------------------------
+
+[
+  def m (fixture)
+  def m2 ((m TrieMap.encode) TrieMap.decode)
+  (m TrieMap.entries) (m2 TrieMap.entries) Assert.equal end
+  3 (m2 "card" TrieMap.get) Assert.equal end
+
+  # a stored `none` value survives the round-trip (jsonify writes it as
+  # JSON null and parse hydrates it back; compare with `eq` — the hydrated
+  # none is `eq` to the literal but Assert.equal still distinguishes them)
+  def m3 ((fixture) "nil" none TrieMap.set)
+  def m3b ((m3 TrieMap.encode) TrieMap.decode)
+  true (m3b "nil" TrieMap.has) Assert.equal end
+  true ((m3b "nil" TrieMap.get) eq none) Assert.equal end
+
+  def s ((((TrieSet.make) "b" TrieSet.add) "a" TrieSet.add) "ab" TrieSet.add)
+  def s2 ((s TrieSet.encode) TrieSet.decode)
+  (s TrieSet.keys) (s2 TrieSet.keys) Assert.equal end
+
+  # an empty trie survives the round-trip
+  def e2 (((TrieMap.make) TrieMap.encode) TrieMap.decode)
+  0 (e2 TrieMap.size) Assert.equal end
+
+  # decoding a payload of the wrong kind raises a catchable, named error
+  def msg (do [ ((s TrieSet.encode) TrieMap.decode) "no-raise" ]
+           error [ var [[e] convert String (e "message" get) ] ])
+  "TrieMap.decode: expected kind 'triemap', got 'trieset'" msg Assert.equal end
+] "codec-roundtrip" Test.test end
+
+
 # --- summary -------------------------------------------------------
 
 "---" print

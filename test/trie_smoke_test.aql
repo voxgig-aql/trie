@@ -1,13 +1,17 @@
 # Smoke demo for the trie utilities. Imports all four variants and walks
 # the common surface of each, so `aql test/trie_smoke_test.aql` is a quick end-to-end
 # check that every module loads and answers.
+#
+# Each print is its own `end`-terminated statement: chained sibling prints
+# (`"a" print (x) print`) still evaluate out of source order on current aql
+# (the one open forward-collection issue), and the terminator sidesteps it.
 
 import "./trie.aql"
 import "./radix.aql"
 import "./tst.aql"
 import "./burst.aql"
 
-"--- trie utilities smoke demo ---" print
+"--- trie utilities smoke demo ---" print end
 
 
 # --- TrieMap: the standard prefix tree, used as a map ---------------
@@ -16,12 +20,18 @@ def words ["cat" "car" "card" "cart" "dog"]
 
 def tm ((TrieMap.make) words [ var [[w acc] acc w (w size) TrieMap.set end ] ] fold)
 
-"" print
-"TrieMap keys:        " print (tm TrieMap.keys) print
-"TrieMap get 'card':  " print (tm "card" TrieMap.get) print
-"TrieMap prefix 'car':" print (tm "car" TrieMap.keys-with-prefix) print
-"TrieMap longest of 'cartoon':" print (tm "cartoon" TrieMap.longest-prefix) print
-"TrieMap size/height: " print `${(tm TrieMap.size)} / ${(tm TrieMap.height)}` print
+"TrieMap keys:" print end
+(tm TrieMap.keys) print end
+"TrieMap get 'card':" print end
+(tm "card" TrieMap.get) print end
+"TrieMap prefix 'car':" print end
+(tm "car" TrieMap.keys-with-prefix) print end
+"TrieMap longest of 'cartoon':" print end
+(tm "cartoon" TrieMap.longest-prefix) print end
+"TrieMap size/height:" print end
+`${(tm TrieMap.size)} / ${(tm TrieMap.height)}` print end
+"TrieMap decode(encode) round-trips:" print end
+(((tm TrieMap.encode) TrieMap.decode) TrieMap.entries) print end
 
 
 # --- RadixSet: the compressed variant, used as a set ----------------
@@ -32,10 +42,12 @@ def rs (((((RadixSet.make)
   "romulus" RadixSet.add)
   "rubens"  RadixSet.add)
 
-"" print
-"RadixSet keys:       " print (rs RadixSet.keys) print
-"RadixSet has 'roman':" print (rs "roman" RadixSet.has) print
-"RadixSet prefix 'rom':" print (rs "rom" RadixSet.with-prefix) print
+"RadixSet keys:" print end
+(rs RadixSet.keys) print end
+"RadixSet has 'roman':" print end
+(rs "roman" RadixSet.has) print end
+"RadixSet prefix 'rom':" print end
+(rs "rom" RadixSet.with-prefix) print end
 
 
 # --- TstSet: ternary search tree ------------------------------------
@@ -45,9 +57,10 @@ def ts ((((TstSet.make)
   "inn" TstSet.add)
   "tin" TstSet.add)
 
-"" print
-"TstSet keys:         " print (ts TstSet.keys) print
-"TstSet longest 'innings':" print (ts "innings" TstSet.longest-prefix) print
+"TstSet keys:" print end
+(ts TstSet.keys) print end
+"TstSet longest 'innings':" print end
+(ts "innings" TstSet.longest-prefix) print end
 
 
 # --- BurstMap: burst trie, exercised past its burst limit -----------
@@ -59,8 +72,11 @@ def bm ((BurstMap.make) (iota 20) [
   ]
 ] fold)
 
-"" print
-"BurstMap size:       " print (bm BurstMap.size) print
-"BurstMap get 'item-7':" print (bm "item-7" BurstMap.get) print
-"BurstMap prefix 'item-1':" print (bm "item-1" BurstMap.keys-with-prefix) print
-"BurstMap encode:     " print (bm BurstMap.encode) print
+"BurstMap size:" print end
+(bm BurstMap.size) print end
+"BurstMap get 'item-7':" print end
+(bm "item-7" BurstMap.get) print end
+"BurstMap prefix 'item-1':" print end
+(bm "item-1" BurstMap.keys-with-prefix) print end
+"BurstMap decode(encode) size:" print end
+(((bm BurstMap.encode) BurstMap.decode) BurstMap.size) print end

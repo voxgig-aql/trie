@@ -59,10 +59,10 @@ use and the shape (and depth) of the tree.
 
 ### Standard trie (`trie.aql`)
 
-One node per character. A node's children are an association list of
-`[char, child]` pairs. Simple and predictable; the baseline. Its weakness
-is long, unshared keys: storing `"internationalization"` spends one node
-per letter even though none of those letters branch.
+One node per character. A node's children are a map keyed by character.
+Simple and predictable; the baseline. Its weakness is long, unshared keys:
+storing `"internationalization"` spends one node per letter even though
+none of those letters branch.
 
 ### Radix / PATRICIA tree (`radix.aql`)
 
@@ -115,33 +115,32 @@ around, and reason about, and it fits AQL's value-oriented data model —
 maps and lists behave as values, so "mutate in place" is not the natural
 idiom here.
 
-### Children as association lists
+### Children as computed-key maps
 
-A node's children are stored as a list of `[label, child]` pairs rather
-than as a map keyed by the character. This is deliberate: AQL maps cannot
-be constructed with computed keys, and `refine Object` instances cannot be
-enumerated, so neither can hold a dynamic, walkable set of children. A
-list of pairs is the one shape that is both rebuildable and iterable. The
-cost is that finding a child is a linear scan of the siblings — fine for a
-modest branching factor, and exactly what the ternary search tree
-optimizes away by ordering siblings into a BST.
+A node's children are a real map — keyed by character in the standard and
+burst tries, and by an edge label's first character in the radix tree
+(whose invariant guarantees those are distinct). Lookup is a direct
+`kids get (ch)`, updates are AQL's copy-returning Map `set` (which is what
+keeps the structure persistent), and `StructUtil.items` enumerates the
+children as **key-sorted** pairs. That sorted enumeration is load-bearing:
+a node emits its own key before descending, and children are visited in
+character order, so every listing word produces sorted output *by
+construction*, with no final sort.
 
-### Boxed values
-
-Stored values are wrapped in a one-element list (a "box") inside each
-node. The node constructor builds its map with AQL's `do {…}` form, which
-*evaluates* the map's values — so a bare String value equal to a word name
-(`"if"`, `"do"`, `"get"`) would be dispatched as code instead of stored.
-Boxing keeps the value as inert list data; the library unboxes it on the
-way out. This is invisible to callers but is why a `…Map` can safely store
-*any* value.
+Earlier versions of this library stored children as association lists of
+`[char, child]` pairs, because AQL then had no way to build or walk a map
+with computed keys. That language gap — reported in `DX-REPORT.md` — was
+closed upstream (`{[k]: v}` literals, copy-returning Map `set`,
+`StructUtil.items`), and the workaround is retired. One asymmetry remains:
+there is no key-*removal* word, so deleting a child rebuilds the map from
+its entries, skipping one — the same cost the list splice had.
 
 ### Why not `merge`
 
 Nodes are rebuilt with an explicit field-by-field constructor, never with
-AQL's `merge`. `merge` is a deep, index-wise merge: merging a replacement
-`kids` list into a node would fuse it element-by-element with the old
-list, silently entangling sibling subtrees. The explicit constructor
+`StructUtil.merge`. That `merge` is a deep, index-wise merge: merging a
+replacement `kids` value into a node would fuse it entry-by-entry with the
+old one, silently entangling sibling subtrees. The explicit constructor
 replaces a field outright, which is what rebuilding a path requires.
 
 ### `height` is per-variant
