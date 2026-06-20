@@ -12,8 +12,11 @@ on:
   workflow_dispatch:
 
 env:
-  # aql-lang/aql @ main, 2026-06-20 (a bytecode-compiler-in-progress HEAD).
-  AQL_REF: d90fe1030ef58faba30aadf370990598939340cb
+  # aql-lang/aql @ main, 2026-06-20 (a bytecode-compiler-in-progress HEAD;
+  # this commit adds the `--force-compile` flag — see DX-REPORT.md). The
+  # suites run on the interpreter (the default, supported path); the compiler
+  # is opt-in and produces identical results.
+  AQL_REF: c44d994f33c5cc39b2a1cc4d2f170b3b0aa07431
 
 jobs:
   test:
@@ -64,16 +67,41 @@ jobs:
 
       # Each suite ends with `0 test.fail-count end assert.equal`, so a
       # failure makes aql exit non-zero and fails the step.
-      - name: Unit tests — standard trie (direct)
-        run: aql test/trie_unit_test.aql
-      - name: Unit tests — standard trie (spec)
+      #
+      # The four imperative unit suites are written to stay inside the
+      # bytecode compiler's lowerable subset (value fixtures, no user-`fn`
+      # call / `fold` / `each` inside a `Test.test` body), so each is gated
+      # three ways: on the interpreter (the default execution path), through
+      # `aql check` (which exits non-zero on any error-level diagnostic — the
+      # files carry only benign `unused_def` warnings, see DX-REPORT.md), and
+      # on the bytecode VM via `--force-compile` (which aborts on any emitter
+      # refusal). The other surfaces below (specs, property suites, smoke)
+      # use `fold`/`each`/`check-prop` bodies the in-progress compiler cannot
+      # yet lower, and the library modules trip ~900 `check` false positives,
+      # so those run on the interpreter only.
+      - name: Unit tests — interpreter
+        run: |
+          for f in trie radix tst burst; do
+            echo "::group::aql test/${f}_unit_test.aql"
+            aql "test/${f}_unit_test.aql"
+            echo "::endgroup::"
+          done
+      - name: Unit tests — static check (0 errors)
+        run: |
+          for f in trie radix tst burst; do
+            echo "::group::aql check test/${f}_unit_test.aql"
+            aql check "test/${f}_unit_test.aql"
+            echo "::endgroup::"
+          done
+      - name: Unit tests — bytecode compiler (--force-compile)
+        run: |
+          for f in trie radix tst burst; do
+            echo "::group::aql --force-compile test/${f}_unit_test.aql"
+            aql --force-compile "test/${f}_unit_test.aql"
+            echo "::endgroup::"
+          done
+      - name: Unit spec — standard trie (interpreter)
         run: aql test/trie_unit_spec.aql
-      - name: Unit tests — radix tree
-        run: aql test/radix_unit_test.aql
-      - name: Unit tests — ternary search tree
-        run: aql test/tst_unit_test.aql
-      - name: Unit tests — burst trie
-        run: aql test/burst_unit_test.aql
 
       - name: Property tests — standard trie (spec)
         run: aql test/trie_prop_spec.aql

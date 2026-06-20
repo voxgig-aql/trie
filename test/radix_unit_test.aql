@@ -1,7 +1,10 @@
 # Radix-tree tests using aql:test's imperative API.
 #
-# Run:
+# Runs identically under the interpreter, `aql check`, and the bytecode
+# compiler:
 #   aql test/radix_unit_test.aql
+#   aql check test/radix_unit_test.aql
+#   aql --force-compile test/radix_unit_test.aql
 
 
 import "aql:test"
@@ -10,16 +13,15 @@ import "./radix.aql"
 
 # Keys chosen to exercise edge splits and shared prefixes:
 #   test, team share "te"; slow/slower/slowest nest; toast shares only "t".
-def fixture fn [
-  [] [Map] [
-    (((((( RadixMap.make)
-      "test"    1 RadixMap.set)
-      "team"    2 RadixMap.set)
-      "toast"   3 RadixMap.set)
-      "slow"    4 RadixMap.set)
-      "slower"  5 RadixMap.set)
-  ]
-]
+# A shared immutable value (not a `fn`): tries never mutate, and a user-`fn`
+# call inside a `Test.test` quotation is a bytecode-compiler refusal.
+def fixture
+  (((((( RadixMap.make)
+    "test"    1 RadixMap.set)
+    "team"    2 RadixMap.set)
+    "toast"   3 RadixMap.set)
+    "slow"    4 RadixMap.set)
+    "slower"  5 RadixMap.set)
 
 
 # --- empty -----------------------------------------------------------

@@ -7,7 +7,7 @@ a downstream project) and **extending** it. Human docs: `README.md`, `docs/`
 
 The four modules depend only on the **standard `aql:struct-util` module**
 (map enumeration + jsonic parse/serialise), which ships with the interpreter —
-no third-party dependencies. Verified against `aql` commit `d90fe103`.
+no third-party dependencies. Verified against `aql` commit `c44d994f`.
 
 ---
 

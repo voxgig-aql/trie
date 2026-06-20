@@ -405,3 +405,29 @@ the original wishlist (trace `/r` exports, core `Returns`, `Any`-
 unification, a body re-parser) are still what stand between this output
 and a gateable true-positive set. CI keeps the `--soft` +
 `continue-on-error` step.
+
+## Re-run at `c44d994f` (2026-06-20) — and a new consequence
+
+Re-confirmed byte-identical at the `c44d994f` re-pin: same five classes,
+same volume, `uncalled_function` intact. The checker output did not move.
+
+What *did* change is that the false positives now have **teeth they didn't
+have before**. This commit adds the `--force-compile` flag (require the
+bytecode VM, abort otherwise), and `--force-compile` **runs `aql check`
+first and refuses on any diagnostic** — `error: force-compile: check
+diagnostics`. So the ~900 documented false positives, until now a purely
+advisory CI annoyance, are what stop `--force-compile` from reaching the
+emitter on any non-trivial library script. A harness-free `make`/`add`/
+`has` script (which the checker leaves clean) *does* compile and run on the
+VM; anything that exercises the `/r` reference-exports or an `Any`-typed
+fold shape is refused at the `check` gate before the compiler is even
+consulted.
+
+This sharpens the wishlist's priority rather than changing it: items 1–4
+were "the gap between advisory and gate" for CI; they are now also the gap
+between "the compiler can't see this library" and "the compiler can show
+us how much of it it lowers." Until `check` can distinguish this library's
+dynamic dispatch from a real error, the compiler's true coverage stays
+masked behind the checker. See `DX-REPORT.md`'s fourth upgrade review for
+the emitter-side (Stage 2/3) refusals that form the second wall once a
+script clears `check`. The interpreter remains the gate; CI is unchanged.

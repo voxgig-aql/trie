@@ -576,3 +576,116 @@ Neither blocks this library — tries are narrow-fanout, so copy-returning
 `set` copies little, and the data words (`from-keys`/`from-entries`) batch
 the build. They are upstream wishes, logged here because this is the report
 the language team reads.
+
+## Fourth upgrade review (`c44d994f`, 2026-06-20)
+
+Re-pinned from `d90fe103` to `c44d994f`, a short hop further along the same
+bytecode-compiler line. The bump is **mechanical** — no library code
+changed — and all ten suites plus the smoke demo run green on the
+interpreter, which remains the default and only supported execution path.
+The one new thing in this window worth a consumer's attention is a CLI
+surface for the in-progress compiler: the **`--force-compile`** flag.
+
+### `--compile` vs `--force-compile`
+
+| Flag | Env | Behaviour |
+|---|---|---|
+| *(none)* | `AQL_NO_COMPILE` | **Interpreter** — the default; `AQL_NO_COMPILE` is a kill switch that overrides both flags. |
+| `--compile` | `AQL_COMPILE` | **Best-effort:** run on the VM when the whole program is compilable, else **silently fall back** to the interpreter. |
+| `--force-compile` | `AQL_FORCE_COMPILE` | **Strict:** *require* the VM; abort with the emitter's refusal reason instead of falling back. |
+
+The compiler is documented to produce results identical to the interpreter,
+so the choice is purely performance/coverage — there is nothing to migrate.
+`--compile`'s silent fallback means it can never tell you whether a run
+*actually* went through the VM; `--force-compile` makes that observable,
+which is the only reason it's interesting here.
+
+### What `--force-compile` reveals for this library
+
+The library refuses in two layers, in this order:
+
+1. **`aql check` gates first.** `--force-compile` runs the static checker
+   and aborts on any **error-level** diagnostic (`error: force-compile:
+   check diagnostics`) before the emitter even runs (warnings do not
+   block it). Checking a *library module* directly trips ~900 documented
+   `check` **false positives** (generic stack-dispatch + reference-exported
+   namespaces — see `AQL-CHECK-REPORT.md`), so compiling code that pulls a
+   whole module in at that granularity is refused here regardless of what
+   the emitter could do. (A *test file* that merely imports the library is
+   far cleaner — `aql check test/<x>_unit_test.aql` reports 0 errors, only
+   `unused_def` warnings — so the check gate is not what blocks the unit
+   suites; the emitter is.)
+
+2. **The emitter then refuses the test/spec harness.** For the subset that
+   does pass `check`, the in-progress emitter still can't lower the test
+   framework's higher-order constructs. First refusal per suite:
+
+   | suite(s) | `--force-compile` refusal |
+   |---|---|
+   | `*_unit_test` (trie/radix/tst/burst) | `fn test-test$body: body leaves extra values (Stage 3 lowers in-order results)` |
+   | `*_prop_spec` (trie/radix/tst/burst) | `operand of unknown provenance or not statically materialisable at each` |
+   | `trie_unit_spec` | `fn each$body: result above a literal (Stage 3)` |
+   | `trie_prop_test` | `code-body word test-check-prop (Stage 2)` |
+   | `trie_smoke_test` | `check diagnostics` |
+
+3. **The library's own node ops *do* compile.** A harness-free script that
+   only calls the public words on a small input — `(TrieSet.make) "cat"
+   TrieSet.add` then `… TrieSet.has print` — compiles and runs on the VM
+   under `--force-compile` (prints the right answer). So basic
+   `make`/`add`/`has` lower cleanly; the wall is (a) the `check` gate for
+   richer usage and (b) Stage 2/3 emitter gaps for the test framework.
+   Both are upstream, in-progress, and **not** library regressions, so CI
+   and the SessionStart hook stay on the interpreter and keep the suites
+   as the gate.
+
+### The ask this surfaces
+
+The single most useful next step for *this* consumer is for the compiler
+path to honour the same advisory stance CI already takes on `check`: a way
+to compile the runnable subset **without the ~900 known-false `check`
+diagnostics blocking it**. That is the same items 1–4 wishlist the check
+report has carried since round 1 (trace `/r` reference-exports, core
+`Returns`, `Any`-unification, a body re-parser) — until `check` can tell
+this library's dynamic dispatch apart from a real error, `--force-compile`
+can't reach the emitter on real code, and the compiler's true coverage of
+the library stays masked behind the checker. The emitter's Stage 2/3 gaps
+(fold/each bodies that leave residual values, code-body words) are the
+second wall, and squarely in-progress compiler work.
+
+### Bringing the four unit suites into the compilable subset
+
+The emitter table above was the *starting* state. The four imperative unit
+suites (`trie/radix/tst/burst_unit_test.aql`) are now written to stay
+inside what the bytecode compiler can lower, so each runs green **three
+ways** — interpreter, `aql check` (0 errors), and `--force-compile` — and
+CI gates all three (`ci/test.yml`). Two small, behaviour-preserving changes
+did it, and they map cleanly onto two distinct emitter limitations worth
+recording:
+
+- **A user-`fn` call inside a `Test.test` quotation is a Stage-3 refusal**
+  (`fn test-test$body: body leaves extra values`). The suites built their
+  fixtures as zero-arg `fn`s and called them per block (`def t (fixture)`).
+  Because tries are immutable, a fixture is just as correct as a single
+  **shared value** — `def fixture (… set …)` instead of `def fixture fn
+  [[] [Map] [ … ]]` — and a value reference lowers cleanly where the `fn`
+  call did not. (Minimal repro: `[ def t (myfn) … ] "x" Test.test` refuses;
+  inlining or a value binding compiles.) This is the single change that
+  unblocked trie/radix/tst.
+
+- **`fold` / `each` bodies do not lower yet** (`fn fold$body: result above
+  a literal`, `operand of unknown provenance … at each`). Burst's two
+  bucket-bursting tests generated a 30-key map with a `fold` and verified
+  retrieval with an `each`+`fold`, both inside the `Test.test` body. They
+  were rebuilt around a shared `BurstMap.from-entries` **value** of 12
+  enumerated keys (still well over the burst-limit of 8, so the bucket
+  still bursts) plus explicit per-key assertions — same property under
+  test, no loop in the body. This is the deeper gap: it also blocks every
+  `*_prop_spec`, `trie_prop_test`, and `trie_unit_spec`, which are
+  loop/`check-prop`-driven by nature and stay interpreter-only.
+
+The net: the compiler now demonstrably covers the library's full public
+surface as exercised by the unit suites (every `Set`/`Map` word, including
+`within`/`match`/`encode`/`decode` and the `do … error` codec path), not
+just the trivial `make`/`add`/`has` probe. The remaining
+interpreter-only suites are blocked solely by the `fold`/`each`/`check-prop`
+emitter gap, not by anything in the library.

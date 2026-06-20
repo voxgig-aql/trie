@@ -1,23 +1,27 @@
 # Standard-trie tests using aql:test's imperative API.
 #
-# Run:
-#   aql test/trie_unit_test.aql
+# Runs identically under the interpreter, `aql check`, and the bytecode
+# compiler:
+#   aql test/trie_unit_test.aql                 # interpreter
+#   aql check test/trie_unit_test.aql           # static check (0 errors)
+#   aql --force-compile test/trie_unit_test.aql # bytecode VM
 
 
 import "aql:test"
 import "./trie.aql"
 
 
-# Build a small fixture map: cat=1 car=2 card=3 dog=4.
-def fixture fn [
-  [] [Map] [
-    ((((( TrieMap.make)
-      "cat"  1 TrieMap.set)
-      "car"  2 TrieMap.set)
-      "card" 3 TrieMap.set)
-      "dog"  4 TrieMap.set)
-  ]
-]
+# A small fixture map: cat=1 car=2 card=3 dog=4. Tries are immutable, so a
+# single shared value is safe to reuse across every test (nothing mutates it;
+# derivations rebind). Bound as a value, not a `fn`: a user-`fn` call inside a
+# `Test.test` quotation is a Stage-3 bytecode-compiler refusal ("body leaves
+# extra values"), so the fixture is a value to keep the bodies compilable.
+def fixture
+  ((((( TrieMap.make)
+    "cat"  1 TrieMap.set)
+    "car"  2 TrieMap.set)
+    "card" 3 TrieMap.set)
+    "dog"  4 TrieMap.set)
 
 
 # --- TrieMap: empty trie ---------------------------------------------
