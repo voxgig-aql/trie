@@ -1,9 +1,16 @@
 # Verifying the trie library against `aql` main — interpret / check / compile
 
 **Date:** 2026-06-23
-**aql tested:** `main` @ `f8ee64269fa10f6a0c1b2d9b953ad904a9e7e51d` (built from source)
+**aql tested:** `main` @ `f8ee64269fa10f6a0c1b2d9b953ad904a9e7e51d`, retested @
+`65410b18565ea64ba4fc2a55a73eeb04fa90401f` (both built from source)
 **aql currently pinned:** `c44d994f33c5cc39b2a1cc4d2f170b3b0aa07431`
 **Library:** `voxgig-aql/trie` (standard trie + radix / tst / burst variants)
+
+> **Retest note (`65410b18`, 5 commits past `f8ee6426`, incl. a
+> "bytecode-compiler-impl" merge):** the verdict is **unchanged** — only
+> interpreting works fully. The library's own `check` error count dropped
+> (`trie.aql` 190 → 150), but the transitive-import check still gates check
+> and compile. See [§5 Retest](#5-retest-at-65410b18) at the end.
 
 ## Task
 
@@ -195,3 +202,47 @@ printf 'import "./trie.aql"\n((TrieSet.make) "x" TrieSet.add) "x" TrieSet.has pr
 aql            check /tmp/imp.aql   # c44d994f → 0 errors
 /tmp/aql-main  check /tmp/imp.aql   # f8ee6426 → 28 errors
 ```
+
+---
+
+## 5. Retest at `65410b18`
+
+Re-ran the full pass against `main` @
+`65410b18565ea64ba4fc2a55a73eeb04fa90401f` — 5 commits past `f8ee6426`,
+including the #180 "bytecode-compiler-impl" merge. **The verdict is
+unchanged:** interpreting works fully; checking and compiling are still
+blocked by the transitive-import check.
+
+| Mode | `f8ee6426` | `65410b18` |
+|---|---|---|
+| Interpreting (11 suites) | ✅ green | ✅ green |
+| `aql check` import-only probe | 28 errors | **28 errors** (unchanged) |
+| `aql check` unit suites (trie/radix/tst/burst) | 17 / 58 / 70 / 28 | **17 / 58 / 70 / 28** (unchanged) |
+| `--force-compile` unit suites | ❌ `check diagnostics` | ❌ `check diagnostics` |
+| `aql check trie.aql` (module direct) | 190 errors | **150 errors** |
+| bare `fold` / `each` `--force-compile` | ✅ `6` / `[2,3,4]` | ✅ `6` / `[2,3,4]` |
+
+**What moved:** the library's *own* `check` error count fell from 190 to
+150 on `trie.aql`, so this window trimmed some of the false-positive classes
+— real progress, but far short of the zero needed to clear the gate.
+
+**What did not move:** the transitive-import check is identical (an
+import-only script still inherits 28 errors from the library), so it still
+gates both `aql check` and `--force-compile` on every suite. The emitter is
+still healthy (`fold`/`each` lower and run), and still unreachable behind the
+check gate for any program that imports the library.
+
+**Conclusion holds:** keep the pin at `c44d994f`. Adopting `main` still waits
+on the transitive-check change no longer surfacing imported-module
+diagnostics as gating errors, or on the library's documented false-positive
+classes being resolved upstream (`AQL-CHECK-REPORT.md` wishlist 1–4).
+
+### Access note
+
+The session's git credential relay began returning **403 for
+`aql-lang/aql`** (`git fetch`/`clone` of that repo), though it worked earlier
+in the session. GitHub egress itself is allowed (a direct HTTPS request
+returns 200), so this run fetched `main` via the public source tarball
+(`https://codeload.github.com/aql-lang/aql/tar.gz/<sha>`) and built from
+that. Re-pinning still only needs the commit SHA, which the GitHub API
+(`/repos/aql-lang/aql/commits/main`) returns.
