@@ -381,3 +381,59 @@ the check cascades, property suites by the emitter.
 | `burst_unit_test` | ✅ | 6 | ❌ |
 | `trie_prop_test`  | ✅ | 0 | ❌ (emitter: `test-check-prop`) |
 | all 11 suites     | ✅ | — | — |
+
+---
+
+## 8. Resolved upstream — `aql check` is clean; pin `407fedad`, check now gated
+
+The §7 "emergent whole-program cascades" are **gone**. Upstream landed the
+checker-precision work (gradual-`Any` carriers, `/r` reference-export
+use-tracing, recursive re-analysis suppression, dynamic-carrier / branch-merge
+/ fold-seed matching, and the `build-row` body-reparse fix), independently
+re-verified across all three client libraries in
+[`design/CLIENT-VERIFICATION-MAIN-2026-06-24.md`](https://github.com/aql-lang/aql/blob/main/design/CLIENT-VERIFICATION-MAIN-2026-06-24.md).
+
+Re-pinned to **`407fedad`** (latest `main`, a few commits past the doc's
+`0b010ae`) and re-verified here:
+
+| `407fedad` | interpret | `aql check` | `--force-compile` |
+|---|:--:|:--:|---|
+| all 11 suites | ✅ | **0 errors** | partial (advisory) |
+| `trie`/`radix`/`tst`/`burst`.aql (module-direct) | — | **0 errors** | — |
+
+That is down from the 150–300 errors per module the original
+`AQL-CHECK-REPORT.md` catalogued — its "these false positives are unfixable
+without upstream items 1–4" thesis is now **superseded**: items 1–4 all
+landed.
+
+### Changes made
+
+- **Reverted §7's `trie.aql` workarounds.** `mk-node` is back to the
+  idiomatic `do {end:[fin] val:[val] kids:[kids]}` and `kids-of` is removed —
+  the checker no longer needs either, the original checks 0 errors, and this
+  restores cross-module consistency and the documented `do{}` idiom. (Upstream
+  confirmed both forms check clean; neither fully `--force-compile`s, so the
+  revert is purely a readability/consistency win.)
+- **CI: `aql check` promoted to a HARD GATE** over every suite *and* every
+  module (all 0). The interpreter remains a hard gate. `--force-compile` stays
+  **advisory**.
+- **Pin `407fedad`** across `ci/test.yml`, the hook, `api.json`, `AGENTS.md`,
+  `docs/how-to.md`.
+
+### `--force-compile` — still partial, still advisory
+
+The strict bytecode path refuses a fixed, sound set of code-body words; every
+refusal falls back to a correct interpreter run under `--compile`
+(compile==interpreter holds everywhere). Per the upstream gaps table:
+
+| Refusal | Suites |
+|---|---|
+| `code-body word each (Stage 2)` | every `*_prop_spec` |
+| `unannotated or opaque word do` | `trie`/`tst`/`burst` `_unit_test`, `trie_unit_spec` |
+| `code-body word test-check-prop (Stage 2)` | `trie_prop_test` |
+| `check diagnostics` (dynamic-help example generator, not a real check error) | `radix_unit_test`, `trie_smoke_test` |
+
+These are the named Stage-2 emitter cluster + the dynamic-help-eval project,
+**deferred by design** upstream (a partial fix is known to regress the
+calibrated langspec corpus). Promote the CI `--force-compile` step to a gate
+once they land.

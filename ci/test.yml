@@ -12,11 +12,12 @@ on:
   workflow_dispatch:
 
 env:
-  # aql-lang/aql @ main, 2026-06-20 (a bytecode-compiler-in-progress HEAD;
-  # this commit adds the `--force-compile` flag — see DX-REPORT.md). The
-  # suites run on the interpreter (the default, supported path); the compiler
-  # is opt-in and produces identical results.
-  AQL_REF: 14036b4125a9ccbd9655503a1a4171c008d93d06
+  # aql-lang/aql @ main (latest). We track main on an iterative-improvement
+  # track with upstream, re-pinning to the newest HEAD and retesting (see
+  # AQL-MAIN-VERIFICATION.md). The interpreter is the supported path; `aql
+  # check` is now clean (0 errors) on the suites and modules; `--force-compile`
+  # is opt-in and still partial (deferred emitter/code-body work).
+  AQL_REF: 407fedad2ea2b30c3dde2f29cfbe60e55f94db4e
 
 jobs:
   test:
@@ -68,41 +69,13 @@ jobs:
       # Each suite ends with `0 test.fail-count end assert.equal`, so a
       # failure makes aql exit non-zero and fails the step.
       #
-      # INTERPRETER IS THE HARD GATE for every suite — the supported execution
+      # INTERPRETER IS A HARD GATE for every suite — the supported execution
       # path, and always green.
-      #
-      # `aql check` and `--force-compile` over the unit suites are run as
-      # ADVISORY (continue-on-error) while the pin tracks aql `main`. On the
-      # earlier pin (`c44d994f`) these were a hard three-way gate; current
-      # `main` made `aql check` follow imports, so each unit file now inherits
-      # a handful of the library's emergent `no_signature` cascades (not
-      # reproducible in isolation — see AQL-MAIN-VERIFICATION.md §7 and the
-      # upstream `design/CLIENT-FIXES-2026-06-24.md`). Those gate
-      # `--force-compile` too (the compiled stream IS the check pass). The
-      # upstream gradual-`Any` fix already cut the counts sharply and the rest
-      # is being closed upstream; flip these two steps back to hard gates
-      # (drop `continue-on-error`) once a clean `main` lands.
       - name: Unit tests — interpreter (HARD GATE)
         run: |
           for f in trie radix tst burst; do
             echo "::group::aql test/${f}_unit_test.aql"
             aql "test/${f}_unit_test.aql"
-            echo "::endgroup::"
-          done
-      - name: Unit tests — static check (advisory)
-        continue-on-error: true
-        run: |
-          for f in trie radix tst burst; do
-            echo "::group::aql check test/${f}_unit_test.aql"
-            aql check "test/${f}_unit_test.aql" || echo "::warning::check not clean for ${f}_unit_test (tracked upstream)"
-            echo "::endgroup::"
-          done
-      - name: Unit tests — bytecode compiler (advisory)
-        continue-on-error: true
-        run: |
-          for f in trie radix tst burst; do
-            echo "::group::aql --force-compile test/${f}_unit_test.aql"
-            aql --force-compile "test/${f}_unit_test.aql" || echo "::warning::--force-compile refused for ${f}_unit_test (tracked upstream)"
             echo "::endgroup::"
           done
       - name: Unit spec — standard trie (interpreter)
@@ -122,19 +95,40 @@ jobs:
       - name: Smoke demo
         run: aql test/trie_smoke_test.aql
 
-      # Advisory static check — NOT a gate. `aql check` is a structural type
-      # checker, but this library is deliberately generic: every node is a plain
-      # Map walked by stack-dispatched words, and the namespace surface is
-      # exported by reference (`map-add/r`, …). The checker can't trace those
-      # reference exports or the dynamic dispatch, so it reports false
-      # `unused_def` and `no_signature` diagnostics on code the suites prove
-      # correct. We run it with `--soft` (always exits 0) and
-      # `continue-on-error` so the diagnostics surface in the log for a human to
-      # skim, without ever failing the build. The runnable test suites above are
-      # the real gate.
-      - name: Static check (advisory, non-gating)
+      # Static check — HARD GATE. `aql check` exits non-zero on any
+      # error-level diagnostic. The upstream checker-precision work (gradual
+      # `Any` carriers, `/r` reference-export use-tracing, the `do{}`-param and
+      # dynamic-`set` fixes) landed, so every suite AND every module now checks
+      # 0 errors — what used to be ~150–300 false positives per module. Gating
+      # here guards against a regression on either side. (`unused_def` and
+      # similar live at warning level and do not fail the step.)
+      # Verified clean on the pinned ref; see AQL-MAIN-VERIFICATION.md §8 and
+      # upstream design/CLIENT-VERIFICATION-MAIN-2026-06-24.md.
+      - name: Static check — suites + modules (HARD GATE, 0 errors)
+        run: |
+          for f in test/*.aql trie.aql radix.aql tst.aql burst.aql; do
+            echo "::group::aql check $f"
+            aql check "$f"
+            echo "::endgroup::"
+          done
+
+      # Bytecode compiler (`--force-compile`, the strict path that refuses
+      # rather than falling back) — ADVISORY. It still cannot lower a handful of
+      # code-body words (`each`/`do` map bodies, the test-framework
+      # `test-test`/`test-check-prop`) and trips the dynamic-help example
+      # generator on a few suites — all tracked, deferred upstream emitter work
+      # (design/COMPILABLE-SUBSET.md, CLIENT-VERIFICATION-MAIN-2026-06-24.md).
+      # `--compile` (silent interpreter fallback) matches the interpreter on
+      # every suite, so this is a coverage gap, not a correctness bug. Promote
+      # to a gate once the emitter closes those words.
+      - name: Bytecode compiler — suites (advisory)
         continue-on-error: true
-        run: aql check --soft trie.aql radix.aql tst.aql burst.aql
+        run: |
+          for f in test/*.aql; do
+            echo "::group::aql --force-compile $f"
+            aql --force-compile "$f" || echo "::warning::--force-compile refused for $f (deferred upstream)"
+            echo "::endgroup::"
+          done
 
   # Lightweight guard for the agent-skill packaging and the pinned-ref single
   # source of truth (no aql needed). The plugin must bundle its own copy of the
