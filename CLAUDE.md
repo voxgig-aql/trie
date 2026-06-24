@@ -29,17 +29,19 @@ there is verified against the pinned `aql` build.
 - The pin tracks aql **`main`** (latest), not a "known-good" commit — we are
   on an iterative-improvement track with upstream, so always re-pin to the
   newest `main` and retest. Record each retest in `AQL-MAIN-VERIFICATION.md`.
-- The four imperative **unit** suites (`*_unit_test.aql`) are kept inside the
-  bytecode compiler's lowerable subset (value fixtures, no user-`fn` call /
-  `fold` / `each` inside a `Test.test` body). **Interpreter is the hard CI
-  gate** for every suite. `aql check` and `aql --force-compile` over the unit
-  suites are **advisory** while the pin tracks `main`: current `main` made
-  `check` follow imports, so each unit file inherits a few of the library's
-  emergent `no_signature` cascades (not reproducible in isolation), which also
-  gate `--force-compile`. These are being closed upstream
-  (`AQL-MAIN-VERIFICATION.md` §7); flip both CI steps back to hard gates once
-  a clean `main` lands. The specs and property suites are loop/`check-prop`-
-  driven and run on the interpreter only.
+- CI gates two ways, both **hard**: the **interpreter** (every suite ends by
+  asserting `Test.fail-count` is 0), and **`aql check`** over every suite *and*
+  every module (all now 0 errors — the upstream checker-precision work landed,
+  retiring the ~150–300 false positives per module that `AQL-CHECK-REPORT.md`
+  documented). Keep both green. `aql --force-compile` (the strict bytecode
+  path) is **advisory** — it still refuses a handful of code-body words
+  (`each`/`do` map bodies, the test-framework `test-test`/`test-check-prop`),
+  deferred upstream emitter work; `--compile` matches the interpreter on every
+  suite. Promote it to a gate once the emitter closes those words. The latest
+  retest and the upstream verification it tracks are in
+  `AQL-MAIN-VERIFICATION.md` (§8) — note that doc and `AQL-CHECK-REPORT.md`'s
+  "false positives are unfixable" thesis are now **superseded**: upstream fixed
+  them.
 - Known AQL-runtime gotchas observed with the pinned build are in
   `dx-report.md`. The pinned aql commit is single-sourced in `ci/test.yml`
   (`AQL_REF`); a CI job fails if the hook or `api.json` drift from it.

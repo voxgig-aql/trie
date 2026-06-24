@@ -54,38 +54,26 @@ def empty-node fn [
 # Build a node from its three fields. The flag parameter is named `fin` (not
 # `end`) because `end` is the AQL call terminator and cannot be a binding name;
 # the stored *field* is still "end". Call: `kids val fin mk-node`.
-# Built with chained `set` rather than a `do {…}` map literal: the static
-# checker does not thread a param into a `do {…}` value quotation (`[fin]`),
-# so `do {end:[fin] …}` raised a spurious `undefined_word`. Chained `set` —
-# the same idiom used for child updates — checks clean.
 def mk-node fn [
-  [fin:Any val:Any kds:Map] [Map] [
-    ((({} set "end" fin) set "val" val) set "kids" kds)
+  [fin:Any val:Any kids:Any] [Map] [
+    do {end: [fin], val: [val], kids: [kids]}
   ]
 ]
 
 
 # --- child access ---------------------------------------------------
 
-# The children map of a node. Typed `Map` so callers that `set` into it or
-# enumerate it dispatch cleanly under the static checker — a bare
-# `(nd "kids" get)` is statically `Any` (core `get` returns `Any`), which the
-# checker cannot resolve a downstream `set`/`mk-node` against.
-def kids-of fn [
-  [nd:Map] [Map] [ nd "kids" get ]
-]
-
 # The child node reached by single character `ch`, or `none` if absent.
 # Call: `nd ch find-kid`.
 def find-kid fn [
-  [ch:String nd:Map] [Any] [ (nd kids-of) get (ch) ]
+  [ch:String nd:Map] [Any] [ (nd "kids" get) get (ch) ]
 ]
 
 # `nd` with the child under `ch` replaced by (or added as) `child`.
 # Call: `nd ch child put-kid`.
 def put-kid fn [
   [child:Map ch:String nd:Map] [Map] [
-    ((nd kids-of) set (ch) child) (nd "val" get) (nd "end" get) mk-node
+    ((nd "kids" get) set (ch) child) (nd "val" get) (nd "end" get) mk-node
   ]
 ]
 
