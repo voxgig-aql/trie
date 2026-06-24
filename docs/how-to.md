@@ -29,7 +29,7 @@ the repo's replace directives):
 ```bash
 git clone https://github.com/aql-lang/aql /tmp/aql-source
 cd /tmp/aql-source
-git checkout c44d994f33c5cc39b2a1cc4d2f170b3b0aa07431   # the commit CI pins (ci/test.yml AQL_REF)
+git checkout 14036b4125a9ccbd9655503a1a4171c008d93d06   # the commit CI pins (ci/test.yml AQL_REF)
 cd cmd/go
 GOFLAGS=-mod=mod go build -o "$HOME/.local/bin/aql" ./aql
 ```
@@ -41,7 +41,7 @@ aql -version
 aql test/trie_smoke_test.aql
 ```
 
-This library is verified against aql commit `c44d994f`; the CI workflow
+This library is verified against aql commit `14036b41`; the CI workflow
 (`ci/test.yml`) pins the same commit.
 
 ---
