@@ -1,16 +1,22 @@
 # Verifying the trie library against `aql` main — interpret / check / compile
 
-**Date:** 2026-06-23
-**aql tested:** `main` @ `f8ee64269fa10f6a0c1b2d9b953ad904a9e7e51d`, retested @
-`65410b18565ea64ba4fc2a55a73eeb04fa90401f` (both built from source)
+**Date:** 2026-06-23 (retested 2026-06-24)
+**aql tested:** `main` @ `f8ee6426`, retested @ `65410b18`, then @
+`14036b4125a9ccbd9655503a1a4171c008d93d06` (all built from source)
 **aql currently pinned:** `c44d994f33c5cc39b2a1cc4d2f170b3b0aa07431`
 **Library:** `voxgig-aql/trie` (standard trie + radix / tst / burst variants)
 
-> **Retest note (`65410b18`, 5 commits past `f8ee6426`, incl. a
-> "bytecode-compiler-impl" merge):** the verdict is **unchanged** — only
-> interpreting works fully. The library's own `check` error count dropped
-> (`trie.aql` 190 → 150), but the transitive-import check still gates check
-> and compile. See [§5 Retest](#5-retest-at-65410b18) at the end.
+> **Latest retest (`14036b412`, 2026-06-24):** the upstream team **read this
+> report** and shipped the **gradual-`Any`** fix (the "unify `Any` with
+> concrete params" wishlist item) plus a batch of others — see
+> `design/CLIENT-FIXES-2026-06-24.md`. Check errors fell sharply
+> (`trie_unit_test` 17 → 5, `trie_prop_test` → 0), but two residual classes
+> remain so `--force-compile` still gates on them. Interpreting stays fully
+> green. Keep the pin at `c44d994f`. Full detail in
+> [§6](#6-retest-at-14036b412--upstream-acted-on-this-report).
+>
+> **Earlier retest (`65410b18`):** verdict unchanged from `f8ee6426`; see
+> [§5](#5-retest-at-65410b18).
 
 ## Task
 
@@ -246,3 +252,132 @@ returns 200), so this run fetched `main` via the public source tarball
 (`https://codeload.github.com/aql-lang/aql/tar.gz/<sha>`) and built from
 that. Re-pinning still only needs the commit SHA, which the GitHub API
 (`/repos/aql-lang/aql/commits/main`) returns.
+
+---
+
+## 6. Retest at `14036b412` — upstream acted on this report
+
+Re-ran against `main` @ `14036b4125a9ccbd9655503a1a4171c008d93d06`. **The
+aql team read this very report** (plus the `decision` and `bloom-filter`
+client reports) and shipped a batch of checker/compiler fixes —
+documented upstream in `design/CLIENT-FIXES-2026-06-24.md`. The headline is
+the **gradual-`Any`** change (`0d297b84b`, "checker: gradual (dynamic)
+carriers for explicitly-Any params and returns"), which is exactly the
+long-standing wishlist item *"unify `Any` with concrete params"*: a value
+of static type exactly `Any` (a `:Any` param, an `[Any]`-returning helper)
+now binds a **dynamic carrier** and poly-matches a concrete slot instead of
+failing `no_signature`.
+
+### Checking — sharply reduced (but not yet zero)
+
+| `aql check` | `f8ee6426`/`65410b18` | `14036b412` |
+|---|---:|---:|
+| import-only probe | 28 | **5** |
+| `trie_unit_test`  | 17 | **5** |
+| `trie_prop_test`  | — | **0** ✅ |
+| `burst_unit_test` | 28 | **6** |
+| `radix_unit_test` | 58 | **31** |
+| `tst_unit_test`   | 70 | **31** |
+| `trie.aql` (module direct) | 150–190 | lower again |
+
+### Interpreting / compiling
+
+- **Interpreting:** ✅ all 11 suites still green.
+- **Compiling (`--force-compile`):** ❌ still gated — the compiled stream
+  *is* the check pass, so any residual check error still yields
+  `check diagnostics`. The emitter itself remains healthy.
+
+### The residue (deferred upstream)
+
+The remaining `trie_unit_test` errors are two narrow families the
+gradual-`Any` change does not reach (per the upstream doc, "emergent in the
+full transitive analysis, not reproducible in isolation"):
+
+- `trie.aql:59` — `undefined_word: kids`. The `mk-node` body
+  `do {end:[fin], val:[val], kids:[kids]}` references a param (`kids`) whose
+  name equals the map key; the checker doesn't thread `do {…}` quotation
+  params. (The report's "resolve `do{}` quotation params" item.)
+- `trie.aql:76` — `no_signature` on `get`/`mk-node` in `put-kid`:
+  `(nd "kids" get) set (ch) child` mutates a *freshly-dynamic* node, a path
+  the poly-record does not yet cover for the mutating `set`.
+
+Note the doc's client-side workaround (annotate a node param `:Map` instead
+of `:Any`) does **not** apply to these two spots — `nd` is already `:Map`
+here; the dynamic value comes from `(nd "kids" get)` mid-expression and from
+`mk-node`'s `:Any` field params.
+
+### Verdict
+
+Major progress, driven by this report: the dominant false-positive class is
+gone, `trie_prop_test` checks clean, and the others fell 3–11×. But because
+two residual classes remain and `--force-compile` gates on *zero* check
+errors, the pin stays at **`c44d994f`** for the full three-mode guarantee.
+Two routes to green from here:
+
+1. **Upstream** resolves the `do{}`-param and dynamic-`set` residue (both
+   deferred but scoped in `CLIENT-FIXES-2026-06-24.md`); then re-pin.
+2. **Client-side**: restructure `mk-node` and `put-kid` so the suites reach 0
+   check errors. Attempted in §7.
+
+---
+
+## 7. Route-2 attempt + policy change: pin `main`, always
+
+Policy update from the maintainer: **stop tracking a "best" pin** — this is
+an iterative track with upstream, so the library now pins **latest `main`**
+(`14036b412`) and retests, rather than holding `c44d994f`.
+
+### What the client-side restructure achieved
+
+Both deferred residue classes from `CLIENT-FIXES-2026-06-24.md` are fixable
+**in isolation**, and those fixes are now in `trie.aql`:
+
+- **`do{}` quotation params →** `mk-node` builds the node with chained `set`
+  (`({} set "end" fin) set "val" val …`) instead of
+  `do {end:[fin] …}`. The spurious `undefined_word` on the param is gone.
+- **`set` over a dynamic node →** a typed accessor `kids-of fn [[nd:Map]
+  [Map] […]]` gives the children map a concrete `Map` type, so `put-kid`'s
+  `(nd kids-of) set (ch) child` and the downstream `mk-node` dispatch
+  resolve. `find-kid` uses it too.
+
+Interpreting stays fully green; `trie_unit_test` check errors fell **5 → 3**.
+
+### Why it does not reach zero (and won't, purely client-side)
+
+The remaining errors are **emergent whole-program cascades**: every one is
+**checker-clean when extracted in isolation** (verified for `find-kid`'s
+`get`, `put-kid`'s `val`/`end` `get`, and the `drop-kid` `pair get` fold),
+but reappears under the full transitive analysis — exactly what the upstream
+doc means by "not reproducible in isolation". They trace back to a checker
+mis-parse / cascade seed elsewhere in the module (the `build-row` /
+`fuzzy-go` region), which is upstream's to fix. Restructuring the individual
+sites does not clear them; it only moves the cascade.
+
+And even a **0-error** suite does not compile yet: `trie_prop_test` checks
+clean (0 errors) but `--force-compile` still refuses with
+`code-body word test-check-prop (Stage 2)` — the test-framework emitter gap.
+So on current `main`, **nothing fully compiles**: unit suites are blocked by
+the check cascades, property suites by the emitter.
+
+### Disposition
+
+- **Library:** kept the two `trie.aql` fixes (correct, idiomatic, and they
+  pre-clear the two named residue classes for when the cascade seed is fixed
+  upstream). Did **not** replicate across `radix`/`tst`/`burst`: the cascades
+  dominate there (31/31/6 errors) so the change would not reach zero, and
+  spreading a divergence for no net gain isn't worth it yet.
+- **CI:** interpreter is the **hard gate** for all suites (all green).
+  `aql check` and `--force-compile` over the unit suites are **advisory**
+  (`continue-on-error`) while pinned to `main`; flip back to hard gates once
+  a clean `main` lands.
+- **Pin:** `14036b412` across `ci/test.yml`, the SessionStart hook,
+  `api.json`, `AGENTS.md`, `docs/how-to.md`.
+
+| `14036b412` | interpret | check | compile |
+|---|---|---|---|
+| `trie_unit_test`  | ✅ | 3 (was 5) | ❌ (check-gated) |
+| `radix_unit_test` | ✅ | 31 | ❌ |
+| `tst_unit_test`   | ✅ | 31 | ❌ |
+| `burst_unit_test` | ✅ | 6 | ❌ |
+| `trie_prop_test`  | ✅ | 0 | ❌ (emitter: `test-check-prop`) |
+| all 11 suites     | ✅ | — | — |
