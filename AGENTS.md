@@ -34,14 +34,22 @@ Each module is self-contained — vendor only the variant(s) you use.
 
 ## Calling convention (read this first)
 
+> **In one line.** Forward args, receiver (the trie) **last**:
+> `TrieSet.add key t`. Piping `t TrieSet.add key` also works; only
+> `TrieSet.add t key` misbinds. Tries are **persistent** — rebind the result.
+
 - **Forward arguments have precedence.** A word grabs the tokens *after* it as
   arguments, stops at the next function word or a closing paren, and otherwise
   takes what it needs from the stack. So a terminator is usually unnecessary:
   `import "./trie.aql"`, `(t "x" TrieSet.has)`, and `t "x" TrieSet.has print`
   all resolve on their own.
-- **Receiver first for the trie words** — a convention that makes results pipe:
-  `t key value TrieMap.set`. Each `add`/`set`/`delete` returns a new trie, so
-  the receiver threads through chains and folds.
+- **The receiver (the trie) is the LAST argument** for every Set/Map word.
+  Because it is declared last, two call shapes both bind: **forward (canonical)**
+  `TrieMap.set value key t` — arguments forward, receiver last; and **pipe**
+  `t TrieMap.set value key` — the receiver flows in from the left. Only
+  **receiver-first, all-forward MISBINDS**: `TrieMap.set t key value` feeds `t`
+  as the value → `signature_error`. Each `add`/`set`/`delete` returns a new
+  trie, so the receiver threads through chains and folds either way.
 - **Disambiguate only when a bare literal follows a call.** If a type-compatible
   literal sits immediately after a stack-form call with no word or paren
   between, forward-precedence will consume it. Resolve it with parens, a
@@ -90,6 +98,11 @@ The variants are behaviourally identical (the property suite cross-checks them);
 
 ```aql
 import "./trie.aql"
+
+# Forward canonical (key forward, receiver LAST); rebind — tries are immutable.
+def s0 (TrieSet.make)
+def s1 (TrieSet.add "cat" s0)          # NOT `TrieSet.add s0 "cat"` (misbinds)
+(TrieSet.has "cat" s1) print           # => true
 
 # Build a set from a list of keys (fold; each add returns the next trie).
 # fold runs `init list [body] fold`; the body gets each key `w` and the
@@ -154,8 +167,9 @@ Exact call-forms, arg order, and return types: `api.json` (structured) and
 ## Rules the agent MUST follow
 
 1. **Rebind** the result of `add`/`set`/`delete` — tries never mutate in place.
-2. **Receiver-first** argument order for the trie words: `t key value Map.set`
-   (a convention so results pipe through chains and folds).
+2. **Receiver (the trie) is the LAST argument** for the trie words: forward
+   `Map.set value key t`, or pipe `t Map.set value key`. Only receiver-first
+   all-forward (`Map.set t key value`) misbinds.
 3. **Forward args have precedence**; a call resolves at the next function word
    or paren. Add parens, `end`, or `/s` (force stack) only to stop a bare
    following literal from being grabbed as an argument.

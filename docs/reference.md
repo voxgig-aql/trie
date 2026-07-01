@@ -44,10 +44,13 @@ following a call with nothing between; resolve it with parens, a trailing
 `end`, or the `/s` modifier, which forces stack-arg resolution. This is general
 AQL forward-precedence behaviour, not specific to this library.
 
-The receiver (the trie) is written first and the arguments follow:
-`t key value Map.set`. Keys are Strings; values may be any type. The call
-forms below show a trailing `end` for clarity; it is optional in the common
-case above.
+The receiver (the trie) is the **last** argument in every Set/Map word's
+signature, so two call shapes bind: **forward** `Map.set value key t`
+(arguments forward, receiver last) and **pipe/stack** `t key value Map.set`
+(the receiver flows in from the left — the form used in the Call rows below).
+Only receiver-first-forward (`Map.set t key value`) misbinds. Keys are
+Strings; values may be any type. The Call rows show a trailing `end` for
+clarity; it is optional in the common case above.
 
 ### Immutability
 

@@ -16,6 +16,10 @@ def t (((TrieSet.make) "cat" TrieSet.add) "car" TrieSet.add)
 (t "cartoon" TrieSet.longest-prefix) print  # => "car"
 ```
 
+> **Calling convention.** Forward args, receiver (the trie) **last**:
+> `TrieSet.add key t`. Piping `t TrieSet.add key` also works; only
+> `TrieSet.add t key` misbinds. Tries are **persistent** — rebind the result.
+
 ## The four variants
 
 Each variant ships in its own file and exports **two namespaces** — a
@@ -57,9 +61,9 @@ The standard trie additionally offers two **advanced queries**:
 
 Tries are **persistent (immutable)**: every `add`/`set`/`delete` returns
 a *new* trie and leaves the input untouched. Calls use AQL's
-forward-dispatch — arguments follow the receiver and resolve at the next
-word or paren, so an explicit `end` is rarely needed. Full details and the
-calling convention are in the [Reference](docs/reference.md).
+forward-dispatch — arguments resolve at the next word or paren, so an
+explicit `end` is rarely needed. Full details and the calling convention
+are in the [Reference](docs/reference.md).
 
 ## Documentation
 
