@@ -17,7 +17,7 @@ env:
   # AQL-MAIN-VERIFICATION.md). The interpreter is the supported path; `aql
   # check` is now clean (0 errors) on the suites and modules; `--force-compile`
   # is opt-in and still partial (deferred emitter/code-body work).
-  AQL_REF: 407fedad2ea2b30c3dde2f29cfbe60e55f94db4e
+  AQL_REF: 0721e8280e01a37174c41b99ab49799f3098c135
 
 jobs:
   test:
@@ -113,14 +113,15 @@ jobs:
           done
 
       # Bytecode compiler (`--force-compile`, the strict path that refuses
-      # rather than falling back) — ADVISORY. It still cannot lower a handful of
-      # code-body words (`each`/`do` map bodies, the test-framework
-      # `test-test`/`test-check-prop`) and trips the dynamic-help example
-      # generator on a few suites — all tracked, deferred upstream emitter work
-      # (design/COMPILABLE-SUBSET.md, CLIENT-VERIFICATION-MAIN-2026-06-24.md).
-      # `--compile` (silent interpreter fallback) matches the interpreter on
-      # every suite, so this is a coverage gap, not a correctness bug. Promote
-      # to a gate once the emitter closes those words.
+      # rather than falling back) — ADVISORY, and steadily improving upstream.
+      # As of the pinned ref all four `*_prop_spec` suites compile (the `each`
+      # and dynamic-help `check diagnostics` refusals are gone); the remaining
+      # frontier is `fold`/`each`/`test-test` code-bodies, `loop results as fn
+      # args` (Stage 3), and one `unknown provenance` case — tracked, deferred
+      # upstream emitter work (design/COMPILABLE-SUBSET.md; proposals/aql-full-
+      # compilation.md). `--compile` (silent interpreter fallback) matches the
+      # interpreter on every suite, so this is a coverage gap, not a
+      # correctness bug. Promote to a gate once the emitter closes those words.
       - name: Bytecode compiler — suites (advisory)
         continue-on-error: true
         run: |

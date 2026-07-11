@@ -1,22 +1,20 @@
 # Verifying the trie library against `aql` main — interpret / check / compile
 
-**Date:** 2026-06-23 (retested 2026-06-24)
-**aql tested:** `main` @ `f8ee6426`, retested @ `65410b18`, then @
-`14036b4125a9ccbd9655503a1a4171c008d93d06` (all built from source)
-**aql currently pinned:** `c44d994f33c5cc39b2a1cc4d2f170b3b0aa07431`
+**Date:** 2026-06-23, last retested 2026-07-11
+**aql tested:** `main` @ `f8ee6426` → `65410b18` → `14036b41` → `407fedad` →
+**`0721e828`** (current pin), all built from source
+**aql currently pinned:** `0721e8280e01a37174c41b99ab49799f3098c135`
 **Library:** `voxgig-aql/trie` (standard trie + radix / tst / burst variants)
 
-> **Latest retest (`14036b412`, 2026-06-24):** the upstream team **read this
-> report** and shipped the **gradual-`Any`** fix (the "unify `Any` with
-> concrete params" wishlist item) plus a batch of others — see
-> `design/CLIENT-FIXES-2026-06-24.md`. Check errors fell sharply
-> (`trie_unit_test` 17 → 5, `trie_prop_test` → 0), but two residual classes
-> remain so `--force-compile` still gates on them. Interpreting stays fully
-> green. Keep the pin at `c44d994f`. Full detail in
-> [§6](#6-retest-at-14036b412--upstream-acted-on-this-report).
->
-> **Earlier retest (`65410b18`):** verdict unchanged from `f8ee6426`; see
-> [§5](#5-retest-at-65410b18).
+> **CURRENT STATE (`0721e828`, 2026-07-11) — see [§9](#9-retest-at-0721e828--force-compile-advancing-one-breaking-change).**
+> The story below (§1–§8) is the historical arc: `main`'s transitive `aql
+> check` briefly broke everything (§3), then upstream's checker-precision work
+> landed and made `aql check` clean (§8). As of `0721e828`, **interpreter and
+> `aql check` are both hard CI gates and fully green** (11/11 suites, 4
+> modules, 0 errors). `--force-compile` is advising and **advancing** — 4
+> suites now compile (up from 0). One breaking dispatch change this round
+> (strict forward-collection) needed a one-line test fix. Build was via the Go
+> module proxy — GitHub is egress-blocked this session (§9).
 
 ## Task
 
@@ -437,3 +435,78 @@ These are the named Stage-2 emitter cluster + the dynamic-help-eval project,
 **deferred by design** upstream (a partial fix is known to regress the
 calibrated langspec corpus). Promote the CI `--force-compile` step to a gate
 once they land.
+
+---
+
+## 9. Retest at `0721e828` — force-compile advancing; one breaking change
+
+Re-pinned to **`0721e828`** (latest `main`, 2026-07-11). Two things of note:
+real bytecode-emitter progress, and one breaking dispatch change that needed
+a one-line library fix.
+
+### Fetch note — GitHub blocked; built via the Go module proxy
+
+This session's egress to `aql-lang/aql` tightened further: `git`, `codeload`,
+`github.com`, `api.github.com`, WebFetch, and the scoped GitHub MCP all return
+**403 / access-denied**; only `raw.githubusercontent.com` (single files)
+answers. The build was recovered through the **Go module proxy**
+(`proxy.golang.org`, which is on the egress allowlist): it serves the repo's
+modules at a pseudo-version pinned to the HEAD commit.
+
+```bash
+# proxy.golang.org resolves main -> v0.0.0-<utc>-<sha> and serves each module zip
+VER=$(curl -s https://proxy.golang.org/github.com/aql-lang/aql/@latest | jq -r .Version)
+for m in cmd/go eng/go lang/go; do
+  curl -so $m.zip "https://proxy.golang.org/github.com/aql-lang/aql/$m/@v/$VER.zip"
+done   # unzip into repo layout (cmd/go replaces eng/go, lang/go via ../..) and `go build ./aql`
+```
+
+This is the reliable fallback when GitHub git/tarball access is policy-blocked
+but the Go proxy is reachable.
+
+### Breaking change — strict forward-collection is now an error
+
+`main` promoted the long-known chained-print / forward-collection foot-gun
+(`dx-report.md`: "`5 print 6 print` prints `6` then `5`") from silent
+misordering to a hard `signature_error`:
+
+```
+[aql/signature_error]: print is still waiting for 1 argument(s) when `def`
+begins its own dispatch — a function word is a barrier and never feeds forward
+collection (strict rule); group the call in parens so its RESULT becomes the
+argument
+```
+
+It fired at **both check and interpret** on the one place a bare `print`
+immediately preceded a `def` barrier — `test/trie_prop_test.aql`'s summary
+(`"results:" print` / `def all-results …`). Blast radius: **1 of 11 suites**.
+Fix: `end`-terminate those prints (`"results:" print end`), the exact idiom
+`dx-report.md` already prescribes ("one `print end` per line"). This is a
+**good** change — it makes a silent reorder loud — but it is a breaking one
+for code that leaned on the tolerant behaviour.
+
+### Bytecode `--force-compile` — genuine progress
+
+| | `407fedad` | `0721e828` |
+|---|---|---|
+| suites that compile | 0 | **4** — all `*_prop_spec` |
+| `code-body word each` refusal | every `*_prop_spec` | **gone** (they compile) |
+| `check diagnostics` (dynamic-help) refusal | `radix_unit`, `trie_smoke` | **gone** |
+| `do` map-body refusal | 4 suites | **gone** |
+| new frontier | — | `fold`/`each`/`test-test` code-bodies, `loop results as fn args` (Stage 3), one `unknown provenance` |
+
+So the emitter closed the `each`-over-prop-spec, the `do` map bodies, and the
+dynamic-help `check diagnostics` artifact — three of the classes
+`proposals/aql-full-compilation.md` scoped. The remaining 7 refusals are the
+same two projects, one frontier further in.
+
+### State on `0721e828`
+
+| Mode | Result |
+|---|---|
+| Interpreter (hard gate) | ✅ 11/11 green |
+| `aql check` (hard gate) | ✅ 0 errors — all 11 suites + 4 modules |
+| `--force-compile` (advisory) | 4 compile, 7 refuse (frontier above) |
+
+Library change this round: one line in `test/trie_prop_test.aql`
+(`print` → `print end` in the summary). No module-source change.
