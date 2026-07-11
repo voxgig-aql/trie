@@ -1,0 +1,54 @@
+diff --git a/eng/go/carrier.go b/eng/go/carrier.go
+index 13048dc..e1ef8e9 100644
+--- a/eng/go/carrier.go
++++ b/eng/go/carrier.go
+@@ -3813,7 +3813,17 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value,
+ 		quotaKey = "<anon>"
+ 	}
+ 	r.Check.FnAnalysisCounts[quotaKey]++
+-	if n := r.Check.FnAnalysisCounts[quotaKey]; n > FnAnalysisQuota {
++	// The quota is a CHECK-mode accuracy/step-budget heuristic: past the quota
++	// it fabricates a declared-return `declaredReturnBail` carrier that no event
++	// produced. That carrier has no producedBy entry, so a real COMPILE pass —
++	// which must lower the body's true residual to an operand — cannot resolve
++	// it and refuses "fn <name>: body result of unknown provenance" (the trie
++	// `match-go` / recursive-collector shape, pushed past the name-keyed count
++	// by the re-entrant Test.test compile scopes). The compiler must see the
++	// real body events, so the quota does not apply while Compiling; recursion
++	// still terminates via the FnInflight cycle-breaker below, and runaway
++	// non-recursive shape growth is bounded by the step budget.
++	if n := r.Check.FnAnalysisCounts[quotaKey]; n > FnAnalysisQuota && !r.Check.Compiling {
+ 		if n == FnAnalysisQuota+1 {
+ 			r.Check.AddDiagnostic(CheckDiagnostic{
+ 				Code: "analysis_truncated",
+diff --git a/eng/go/emit.go b/eng/go/emit.go
+index 8cb1dc5..8ca478b 100644
+--- a/eng/go/emit.go
++++ b/eng/go/emit.go
+@@ -4202,9 +4202,24 @@ func (es *EmitState) RecordDynBind(name string, v Value, pos SrcPos) {
+ 		return
+ 	}
+ 	src, srcSeq := emitOperand{}, -1
+-	if pr, ok := es.producedBy[v.ID]; ok && pr.idx == 0 {
++	cur := es.units[len(es.units)-1]
++	if slot, ok := cur.localByID[v.ID]; ok && cur.capID[v.ID] {
++		// A CAPTURE of the CURRENT unit overrides events-first, mirroring
++		// resolveOperand's capID override (emit.go ~1241): the captured value
++		// may still carry a producedBy entry from the ENCLOSING unit (a
++		// persistent module-scope instance built by a parent `def`, or a
++		// computed def snapshotted into the closure) whose event lives in the
++		// parent frame and is unreachable here — so binding from that foreign
++		// seq refuses "dynamic-scope def of unpromoted computed value" (the
++		// promotion has no local event to promote). Re-push this unit's own
++		// capture SLOT instead. Gating on capID (never a join result) is
++		// load-bearing: a plain localByID-first reorder would misbind the
++		// JoinCarriers ID-reuse case (a branch result reusing a live local's
++		// ID) to the local instead of the branch event.
++		src = localOperand(slot)
++	} else if pr, ok := es.producedBy[v.ID]; ok && pr.idx == 0 {
+ 		srcSeq = pr.seq
+-	} else if slot, ok := es.units[len(es.units)-1].localByID[v.ID]; ok {
++	} else if slot, ok := cur.localByID[v.ID]; ok {
+ 		src = localOperand(slot)
+ 	}
+ 	es.appendEvent(emitEvent{kind: evDynBind, dyn: &emitDynBind{

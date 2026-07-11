@@ -33,9 +33,11 @@ sweeps) still deliver a solid speedup:
 
 | N (keys) | interpreter | compiled | speedup |
 |---------:|------------:|---------:|:-------:|
-| 500 | ~6.7 s | ~2.0 s | ~3.3× |
-| 1000 | ~13.5 s | ~4.0 s | ~3.4× |
-| 2000 | ~35 s | ~12 s | ~3.0× |
+| 500 | 6.63 s | 1.95 s | 3.40× |
+| 1000 | 14.06 s | 3.78 s | 3.72× |
+| 2000 | 34.88 s | 11.86 s | 2.94× |
+
+(single clean run, `aql` @ `203ea2f`; re-run `bench/run.sh` for local figures)
 
 Scaling is roughly linear in `N` (slightly superlinear because `with-prefix`
 collects a growing key set). The **~3× compiled speedup comes entirely from the
