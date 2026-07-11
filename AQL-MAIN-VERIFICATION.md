@@ -6,15 +6,21 @@
 **aql currently pinned:** `203ea2f0b059b14b8264002288336e86dd3b378f`
 **Library:** `voxgig-aql/trie` (standard trie + radix / tst / burst variants)
 
-> **CURRENT STATE (`203ea2f`, 2026-07-11) — see [§10](#10-retest-at-203ea2f--force-compile-frontier-fully-unmasked).**
+> **CURRENT STATE (`203ea2f` + 3 landed upstream fixes, 2026-07-11) — see
+> [§11](#11-three-stage-d-fixes-landed-upstream-remaining-frontier-precisely-scoped).**
 > Re-pinned to the newest `main`, `203ea2f` (PR #260, forward-args auto-eval).
 > **Both hard CI gates are green**: interpreter 11/11 suites, `aql check` 0
-> errors across all 11 suites + 4 modules. `--force-compile` remains advisory
-> and is now **fully diagnosed to root cause** — the "code-body word X
-> (Stage 2)" messages were masks; §10 unmasks every one and traces it to a
-> small set of **Stage-D operand-provenance leaves** in the emitter, two of
-> which have clean verified fixes that are *not yet safe to land alone* (they
-> expose deeper VM-level miscompiles). §9 (`0721e828`) is the prior retest.
+> errors across all 11 suites + 4 modules. Three of the Stage-D leaves §10
+> diagnosed now have **landed fixes** on the aql branch
+> `claude/voxgig-aql-baseline-pctxto` (commit `3e94429`) — including the do-catch
+> fix that resolves the "not safe to land alone" regression §10 warned about.
+> With them, the trie suites split **4 fully native-compiled / 5 sound
+> clean-fallback**, every suite **stdout-byte-identical** interpreter-vs-`--compile`
+> and green. §11 records the landed fixes, the residual frontier (one recursive
+> branch-join provenance bug, root-caused; plus the deferred `test-test`/`each`
+> emitter words), and why the pin stays `203ea2f` (fixes are on a branch, not yet
+> merged to `main`). §10 is the prior (pre-fix) root-cause map; §9 (`0721e828`)
+> the retest before it.
 
 ## Task
 
@@ -605,3 +611,103 @@ build the bytecode compiler is **~3× faster** than the interpreter on the trie
 workload (N=1000: 14.1 s → 3.8 s), entirely from the top-level driver loops that
 already compile; closing the leaves above is what would compile the recursive
 trie walks themselves and widen the margin.
+
+## 11. Three Stage-D fixes landed upstream; remaining frontier precisely scoped
+
+Follow-up to §10. The two fixes §10 identified were landed **together with a
+third** that resolves §10's "not safe to land alone" regression, on the aql
+branch `claude/voxgig-aql-baseline-pctxto` (commit `3e94429`, *"compiler: fix
+three Stage-D refusals surfaced by the trie suites"*). All aql pre-commit gates
+are green with them: **`make cover-gate` 100%** (54370/54370 reachable stmts),
+**`make verify-bytecode` PASSED** (the differential byte-identical corpus + the
+`-race` and args-aliasing pins), and `fmt`/`vet`/`lint`/`test` clean.
+
+### The three landed fixes
+
+| # | Engine site | What it fixes | §10 mapping |
+|---|---|---|---|
+| 1 | `carrier.go` `AnalyseFnBody` | Skip the check-mode analysis **quota** while `Compiling` — past-quota it fabricates a provenance-less `declaredReturnBail` carrier a real compile pass can't lower ("body result of unknown provenance"). Recursion still terminates via the `FnInflight` cycle-breaker + step budget. | leaf 1 ("body result of unknown provenance") |
+| 2 | `emit.go` `RecordDynBind` | A **current-unit capture** was misresolved to an unreachable enclosing producing event ("def of unpromoted computed value"). Mirror `resolveOperand`'s capID override → bind from the capture slot; gating on capID keeps the JoinCarriers ID-reuse case correct. | leaf 2 ("dynamic-scope def of unpromoted computed value") |
+| 3 | `native_control.go` `doListReturnsFn` | A **fallible multi-value `do` body under a catch** has runtime-variable arity (N no-raise vs 1 caught Error), so a fixed N-seat underflowed on the caught path (the `STORE_LOCAL` underflow §10 flagged as the codec-roundtrip crash). Refuse it at the single arity source → every lowering path declines uniformly and rides the sound interpreter fallback; pure/infallible multi-value bodies still compile at exact arity. | resolves §10's "critical finding" (steps 2–3) |
+
+Fix 3 is why fixes 1+2 are now safe: §10 found that clearing leaves 1+2 alone
+unhid a deeper `STORE_LOCAL` underflow (the `do…error` value-def) and a
+fold-body dynamic-scope miss, converting a *sound refusal → a broken compile*.
+Fix 3 makes the emitter **correctly refuse** the inherently-variable-arity
+codec block instead of seating it at a wrong fixed count — so the shape falls
+back soundly rather than miscompiling. The `compile == interpret` hard contract
+holds.
+
+### Trie compile state on `203ea2f` + the three fixes
+
+Built the aql branch from source (`cd cmd/go && make build`) and re-swept every
+suite under `--no-compile`, `--compile`, and `--force-compile`. **Every suite's
+stdout is byte-identical between the interpreter and `--compile`, and every
+assertion suite is green.** The split:
+
+| Suite | `--force-compile` | Fallback reason (`--compile`, sound) |
+|---|---|---|
+| `burst_prop_spec` | ✅ **native** | — |
+| `radix_prop_spec` | ✅ **native** | — |
+| `trie_prop_spec`  | ✅ **native** | — |
+| `trie_unit_spec`  | ✅ **native** | — |
+| `burst_unit_test` | fallback | `code-body word test-test (Stage 2)` |
+| `radix_unit_test` | fallback | `code-body word test-test (Stage 2)` |
+| `trie_unit_test`  | fallback | `code-body word test-test (Stage 2)` |
+| `trie_prop_test`  | fallback | `code-body word each (Stage 2)` |
+| `trie_smoke_test` | fallback | `fn call operand of unknown provenance` |
+
+So **4 suites now fully native-compile** (was 4 in §10 too, but the codec /
+capture / recursive-collector *chains* inside the compiling suites are what the
+fixes unblocked — the differential and cover-gate confirm no regression), and
+the remaining 5 fall back **cleanly and soundly** (byte-identical, no crash —
+the §10 STORE_LOCAL / `np`-miss crashes are gone).
+
+### Residual frontier (two categories, neither a quick fix)
+
+1. **Deferred emitter code-body words** — `test-test`/`test-check-prop` (the
+   `Test.test` framework) and one `each` map body. These are **not bugs**: the
+   bytecode emitter has no lowering for these code-body words yet (documented in
+   `CLAUDE.md` as advisory/deferred). Closing them is emitter *feature* work,
+   not a refusal to diagnose.
+
+2. **`fn call operand of unknown provenance`** (`trie_smoke_test`, via
+   `TstSet.longest-prefix` → the recursive `longest-t`). **Root-caused this
+   round** (superseding §10's "recursive `get`-over-dynamic" hypothesis): the
+   real trigger is a **recursive fn whose branch-join accumulator diverges in
+   type/identity across the fixpoint**. Minimal repro:
+
+   ```aql
+   def rec fn [
+     [nd:Any key:Any consumed:Any best:Any] [Any] [
+       if (nd eq none) [best] [
+         def pc (consumed "x" add)
+         def best2 (if (nd "end" get) [pc] [best])   # join of String(pc) & None(best)
+         best2 consumed key (nd "mid" get) rec        # self-call: best2 in the `best` slot
+       ]
+     ]
+   ]
+   (rec none "hi" "" none) print end
+   ```
+
+   Instrumenting `RecordBranch` + `RecordUserCall` (temporary, reverted) showed
+   the self-call's `best2` operand reads as `S_…(Integer)` while the branch that
+   produced it recorded `T_…(Disjunct String|None)` — a **different type and ID**.
+   Between the analysis pass that *records* the join event (`producedBy`) and the
+   context that *reads* `best2` in the self-call, the recursive fixpoint
+   re-derives the accumulator with a divergent carrier, so `resolveOperand` finds
+   it in neither `producedBy` nor `localByID` and the program refuses. This is
+   the recursive-fixpoint × branch-join-identity × operand-provenance interaction
+   — the deepest Stage-D leaf. A correct fix must coordinate join-carrier
+   identity across fixpoint iterations and be re-validated against the full
+   byte-identical differential; it was **precisely diagnosed and deliberately not
+   rushed** this round. (`radix.aql` `node-at` is the same shape.)
+
+### Pin decision
+
+The three fixes live on the aql **branch** `claude/voxgig-aql-baseline-pctxto`,
+**not on `main`**. This repo pins `AQL_REF` to `main`, so the pin **stays at
+`203ea2f`** (the current tip of `main`) — a branch commit must not become the
+pin, or CI would build unmergeable history. Re-pin to the fixes' `main` commit
+once the aql PR merges, and re-run this sweep to promote whichever suites then
+compile natively.
