@@ -171,7 +171,7 @@ def longest-t fn [
           def pc (consumed c add)
           def best2 (if (nd "end" get) [pc] [best])
           def rest (key slice 1 (key size))
-          if ((rest size) eq 0) [best2] [ best2 pc rest (nd "mid" get) longest-t ]
+          if ((rest size) eq 0) [best2] [ if (nd "end" get) [ pc pc rest (nd "mid" get) longest-t ] [ best pc rest (nd "mid" get) longest-t ] ]
         ]
       ]
     ]

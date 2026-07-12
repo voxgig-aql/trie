@@ -169,7 +169,7 @@ def fixture
   0 (e2 TstMap.size) Assert.equal end
 
   # decoding a payload of the wrong kind raises a catchable, named error
-  def msg (do [ ((s TstSet.encode) TstMap.decode) "no-raise" ]
+  def msg (do [ ((s TstSet.encode) TstMap.decode) drop "no-raise" ]
            error [ var [[e] convert String (e "message" get) ] ])
   "TstMap.decode: expected kind 'tstmap', got 'tstset'" msg Assert.equal end
 ] "codec-roundtrip" Test.test end
