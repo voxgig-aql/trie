@@ -236,7 +236,7 @@ def fixture
   0 (e2 TrieMap.size) Assert.equal end
 
   # decoding a payload of the wrong kind raises a catchable, named error
-  def msg (do [ ((s TrieSet.encode) TrieMap.decode) "no-raise" ]
+  def msg (do [ ((s TrieSet.encode) TrieMap.decode) drop "no-raise" ]
            error [ var [[e] convert String (e "message" get) ] ])
   "TrieMap.decode: expected kind 'triemap', got 'trieset'" msg Assert.equal end
 ] "codec-roundtrip" Test.test end

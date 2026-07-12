@@ -184,7 +184,7 @@ def fixture
   0 (e2 RadixMap.size) Assert.equal end
 
   # decoding a payload of the wrong kind raises a catchable, named error
-  def msg (do [ ((s RadixSet.encode) RadixMap.decode) "no-raise" ]
+  def msg (do [ ((s RadixSet.encode) RadixMap.decode) drop "no-raise" ]
            error [ var [[e] convert String (e "message" get) ] ])
   "RadixMap.decode: expected kind 'radixmap', got 'radixset'" msg Assert.equal end
 ] "codec-roundtrip" Test.test end
