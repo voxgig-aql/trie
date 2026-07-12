@@ -716,3 +716,35 @@ The three fixes live on the aql **branch** `claude/voxgig-aql-baseline-pctxto`,
 pin, or CI would build unmergeable history. Re-pin to the fixes' `main` commit
 once the aql PR merges, and re-run this sweep to promote whichever suites then
 compile natively.
+
+## 12. Full native compilation — all suites compile, byte-identical
+
+Follow-up to §11. Every trie suite now compiles under `--force-compile` and is
+**byte-identical to the interpreter** under both `--compile` and
+`--force-compile` (all assertion suites green; the `_prop_spec` generators run
+to the same output). This was achieved with **behaviour-preserving AQL
+restructurings** that route around the aql compile leaves §11 and
+`design/VOXGIG-COMPILE-LEAVES.2.md` scope — NOT by weakening any test. Each
+change was verified interpreter-green + `--compile`==`--force-compile`==
+`--no-compile` byte-identical:
+
+| Leaf | Where | Compile-friendly form |
+|---|---|---|
+| **L-JOIN** (recursive branch-join provenance) | `longest-b`/`longest-r`/`longest-t` (burst/radix/tst) | inline the `end`-node choice at the recursive call instead of binding a join `best2` and passing it to the self-call |
+| **L-NP** (fold-body local misses under compiled dynamic-scope) | `burst.aql` `collect-eb` | build the `[np v]` pair with `([] np push v push)` instead of a list literal that reads the local `np` |
+| **L-DO** (variable-arity fallible `do`) | `*_unit_test` codec cases | `drop` the intentionally-unused decode result so the `do` body is single-value |
+| **L-EACH** (forward-stack-drift guard) | `trie_prop_test` summary | fold the per-result print instead of `each` |
+
+These are compile-friendliness workarounds, not the "right" fix: the maintainer's
+preferred path is to close the leaves in the aql emitter (see
+`design/VOXGIG-COMPILE-LEAVES.2.md`, which retains the minimal repros, traces,
+and order-of-attack). Revert each workaround in favour of the upstream compiler
+fix once it lands. The behaviour is identical either way; the workaround only
+changes WHICH engine runs the hot paths (compiled vs interpreter).
+
+**Important caveat.** The workarounds are the LIBRARY's route around the leaves;
+they do not fix the underlying aql compiler bugs, which remain real (L-JOIN's
+fixpoint provenance, L-NP's dynamic-scope read miss, the `RunCompiledReason`
+side-effect-duplication soundness gap that L-NP exposed). Any DIFFERENT downstream
+code hitting those shapes still falls back (or, for L-NP-class shapes, could
+duplicate output) until the emitter closes them.
