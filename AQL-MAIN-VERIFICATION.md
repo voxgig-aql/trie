@@ -690,18 +690,23 @@ the §10 STORE_LOCAL / `np`-miss crashes are gone).
    (rec none "hi" "" none) print end
    ```
 
-   Instrumenting `RecordBranch` + `RecordUserCall` (temporary, reverted) showed
-   the self-call's `best2` operand reads as `S_…(Integer)` while the branch that
-   produced it recorded `T_…(Disjunct String|None)` — a **different type and ID**.
-   Between the analysis pass that *records* the join event (`producedBy`) and the
-   context that *reads* `best2` in the self-call, the recursive fixpoint
-   re-derives the accumulator with a divergent carrier, so `resolveOperand` finds
-   it in neither `producedBy` nor `localByID` and the program refuses. This is
-   the recursive-fixpoint × branch-join-identity × operand-provenance interaction
-   — the deepest Stage-D leaf. A correct fix must coordinate join-carrier
-   identity across fixpoint iterations and be re-validated against the full
-   byte-identical differential; it was **precisely diagnosed and deliberately not
-   rushed** this round. (`radix.aql` `node-at` is the same shape.)
+   Instrumenting `RecordDynBind` + `RecordBranch` + `RecordUserCall` (temporary,
+   reverted) traced it fully: within ONE compiled unit the SAME source
+   `def best2 (if …)` binds **repeatedly** with different ids AND types
+   (`T_314 Any` → `T_497 Disjunct` → `T_ef4 Disjunct` → `S_204 String` …) and the
+   branch records repeatedly (seq 5, 12, …) — the recursive-**return fixpoint
+   re-analyses the body across iterations**. The self-call's `best2` operand is
+   captured as `S_dad…(Integer)`, an id/type from yet another iteration, matching
+   NONE of the branch outputs recorded in `producedBy` (all `T_…` Disjuncts). So
+   the operand-capture pass and the provenance-recording pass are **different
+   fixpoint iterations with independently-minted ids and divergent inferred
+   types**, and `resolveOperand` finds `best2` in neither `producedBy` nor
+   `localByID`. A correct fix must make the recursive-body re-analysis
+   identity-stable OR unify the operand-capture iteration with the
+   provenance-recording one, then re-validate against the full byte-identical
+   differential; it was **precisely diagnosed and deliberately not rushed** this
+   round. (`radix.aql` `node-at` is the same shape.) Full trace + the other two
+   leaves: aql `design/VOXGIG-COMPILE-LEAVES.2.md` (aql-lang/aql#265).
 
 ### Pin decision
 
