@@ -274,7 +274,7 @@ def longest-r fn [
         if (p (lab size) eq) [
           def np (apath lab add)
           def rk (key slice p (key size))
-          (best2 np rk c longest-r)
+          if (nd "end" get) [ (apath np rk c longest-r) ] [ (best np rk c longest-r) ]
         ] [best2]
       ]
     ]

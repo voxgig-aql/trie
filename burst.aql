@@ -258,7 +258,7 @@ def collect-eb fn [
         var [[pair a]
           def np (prefix (pair get 0) add)
           def v (pair get 1)
-          a [np v] push
+          a ([] np push v push) push
         ]
       ] fold
     ] [
@@ -318,7 +318,7 @@ def longest-b fn [
         def child (nd ch find-kid)
         if (child eq none) [best2] [
           def nc (consumed ch add)
-          (best2 nc rest child longest-b)
+          if (nd "end" get) [ (consumed nc rest child longest-b) ] [ (best nc rest child longest-b) ]
         ]
       ]
     ]

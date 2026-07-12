@@ -193,7 +193,7 @@ def bursted
   0 (e2 BurstMap.size) Assert.equal end
 
   # decoding a payload of the wrong kind raises a catchable, named error
-  def msg (do [ ((big BurstSet.encode) BurstMap.decode) "no-raise" ]
+  def msg (do [ ((big BurstSet.encode) BurstMap.decode) drop "no-raise" ]
            error [ var [[e] convert String (e "message" get) ] ])
   "BurstMap.decode: expected kind 'burstmap', got 'burstset'" msg Assert.equal end
 ] "codec-roundtrip" Test.test end

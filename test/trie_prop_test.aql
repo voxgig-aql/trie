@@ -160,14 +160,14 @@ end
 "---" print end
 "results:" print end
 def all-results (Test.results end)
-def _print-results (all-results each [
-  var [[r]
+def _print-results (0 all-results [
+  var [[r acc]
     def nm (r "name" get)
     def ok (r "ok" get)
     if ok [ `  pass: ${nm}` print ] [ `  FAIL: ${nm}  failing-input=${r "failing-input" get}` print ]
-    0
+    acc
   ]
-])
+] fold)
 "fail count: " print end (Test.fail-count end) print end
 0 (Test.fail-count end) Assert.equal end
 "all green" print end

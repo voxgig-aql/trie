@@ -17,7 +17,7 @@ env:
   # AQL-MAIN-VERIFICATION.md). The interpreter is the supported path; `aql
   # check` is now clean (0 errors) on the suites and modules; `--force-compile`
   # is opt-in and still partial (deferred emitter/code-body work).
-  AQL_REF: 0721e8280e01a37174c41b99ab49799f3098c135
+  AQL_REF: 203ea2f0b059b14b8264002288336e86dd3b378f
 
 jobs:
   test:
