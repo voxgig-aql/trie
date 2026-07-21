@@ -16,7 +16,7 @@ fi
 
 log() { echo "[session-start] $*" >&2; }
 
-AQL_REF=618562025d9e0154107306927911a8b1b046333c
+AQL_REF="${AQL_REF:-$(git ls-remote https://github.com/aql-lang/aql.git main 2>/dev/null | cut -f1)}"
 BIN_DIR="$HOME/.local/bin"
 AQL="$BIN_DIR/aql"
 
@@ -26,12 +26,16 @@ if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
 fi
 export PATH="$BIN_DIR:$PATH"
 
-# A cached binary from an earlier session may predate a pin bump, so the skip
-# is version-aware: rebuild unless the reported version matches AQL_REF.
+# Track aql-lang/aql main: rebuild unless the reported version matches the
+# resolved main HEAD (or main couldn't be resolved — then reuse what's present).
 have_ver="$("$AQL" -version 2>/dev/null || aql -version 2>/dev/null || true)"
-if [ -n "$have_ver" ] && [ "${have_ver#aql }" = "$AQL_REF" ]; then
+if [ -n "$have_ver" ] && { [ "${have_ver#aql }" = "$AQL_REF" ] || [ -z "$AQL_REF" ]; }; then
   log "aql already present ($have_ver); skipping build."
 else
+  if [ -z "$AQL_REF" ]; then
+    log "WARNING: could not resolve aql main HEAD (network?) and no usable aql present; see docs/how-to.md."
+    exit 0
+  fi
   if ! command -v go >/dev/null 2>&1; then
     log "WARNING: Go toolchain not found; cannot build aql. Install Go, or build aql manually (see docs/how-to.md)."
     exit 0

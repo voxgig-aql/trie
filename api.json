@@ -1,7 +1,7 @@
 {
   "name": "trie",
   "version": "0.2.3",
-  "aql_ref": "6185620",
+  "aql_ref": "main",
   "description": "Prefix-tree (trie) utilities for AQL: four variants, each as a Set and a Map.",
   "conventions": {
     "import": "forward form, no terminator: import \"./trie.aql\"",
@@ -11,66 +11,373 @@
     "outputs_sorted": "keys, values, entries, with-prefix, keys-with-prefix, entries-with-prefix return key-sorted output",
     "absent": "get returns none, has returns false for absent keys (never an error)",
     "import_resolution": "relative to the working directory, not the importing file",
-    "external_deps": ["aql:struct-util (standard module shipped with the interpreter)"],
+    "external_deps": [
+      "aql:struct-util (standard module shipped with the interpreter)"
+    ],
     "codec": "decode is the inverse of encode (raises a catchable error on a payload of the wrong kind); data-level round-trips via keys+from-keys or entries+from-entries also work",
     "call_placeholder": "in word_specs, `Set`/`Map` stands for the concrete namespace name (e.g. RadixSet.add, TstMap.get)"
   },
   "modules": {
-    "trie.aql": { "kind": "standard trie", "namespaces": ["TrieSet", "TrieMap"] },
-    "radix.aql": { "kind": "radix / PATRICIA tree", "namespaces": ["RadixSet", "RadixMap"] },
-    "tst.aql": { "kind": "ternary search tree", "namespaces": ["TstSet", "TstMap"], "empty_value": "none" },
-    "burst.aql": { "kind": "burst / HAT trie", "namespaces": ["BurstSet", "BurstMap"] }
+    "trie.aql": {
+      "kind": "standard trie",
+      "namespaces": [
+        "TrieSet",
+        "TrieMap"
+      ]
+    },
+    "radix.aql": {
+      "kind": "radix / PATRICIA tree",
+      "namespaces": [
+        "RadixSet",
+        "RadixMap"
+      ]
+    },
+    "tst.aql": {
+      "kind": "ternary search tree",
+      "namespaces": [
+        "TstSet",
+        "TstMap"
+      ],
+      "empty_value": "none"
+    },
+    "burst.aql": {
+      "kind": "burst / HAT trie",
+      "namespaces": [
+        "BurstSet",
+        "BurstMap"
+      ]
+    }
   },
   "word_specs": {
     "set": {
-      "make":           { "call": "Set.make end",                 "args": [],                                          "returns": "trie" },
-      "add":            { "call": "t key Set.add end",            "args": ["t:trie", "key:String"],                    "returns": "trie", "note": "persistent; rebind. Idempotent." },
-      "has":            { "call": "t key Set.has end",            "args": ["t:trie", "key:String"],                    "returns": "Boolean" },
-      "delete":         { "call": "t key Set.delete end",         "args": ["t:trie", "key:String"],                    "returns": "trie", "note": "persistent; no-op if absent; keeps keys below it" },
-      "with-prefix":    { "call": "t prefix Set.with-prefix end",  "args": ["t:trie", "prefix:String"],                 "returns": "List<String>", "note": "sorted; empty prefix returns all keys" },
-      "longest-prefix": { "call": "t key Set.longest-prefix end",  "args": ["t:trie", "key:String"],                    "returns": "String | none" },
-      "keys":           { "call": "t Set.keys end",               "args": ["t:trie"],                                  "returns": "List<String>", "note": "sorted" },
-      "size":           { "call": "t Set.size end",               "args": ["t:trie"],                                  "returns": "Integer" },
-      "height":         { "call": "t Set.height end",             "args": ["t:trie"],                                  "returns": "Integer", "note": "structural depth; per-variant, not comparable across variants" },
-      "from-keys":      { "call": "keys Set.from-keys end",       "args": ["keys:List<String>"],                       "returns": "trie", "note": "inverse of keys" },
-      "encode":         { "call": "t Set.encode end",             "args": ["t:trie"],                                  "returns": "String", "note": "JSON snapshot (StructUtil.jsonify of {kind, size, keys})" },
-      "decode":         { "call": "s Set.decode end",             "args": ["s:String"],                                "returns": "trie", "note": "inverse of encode; raises a catchable error if the payload kind does not match this variant" }
+      "make": {
+        "call": "Set.make end",
+        "args": [],
+        "returns": "trie"
+      },
+      "add": {
+        "call": "t key Set.add end",
+        "args": [
+          "t:trie",
+          "key:String"
+        ],
+        "returns": "trie",
+        "note": "persistent; rebind. Idempotent."
+      },
+      "has": {
+        "call": "t key Set.has end",
+        "args": [
+          "t:trie",
+          "key:String"
+        ],
+        "returns": "Boolean"
+      },
+      "delete": {
+        "call": "t key Set.delete end",
+        "args": [
+          "t:trie",
+          "key:String"
+        ],
+        "returns": "trie",
+        "note": "persistent; no-op if absent; keeps keys below it"
+      },
+      "with-prefix": {
+        "call": "t prefix Set.with-prefix end",
+        "args": [
+          "t:trie",
+          "prefix:String"
+        ],
+        "returns": "List<String>",
+        "note": "sorted; empty prefix returns all keys"
+      },
+      "longest-prefix": {
+        "call": "t key Set.longest-prefix end",
+        "args": [
+          "t:trie",
+          "key:String"
+        ],
+        "returns": "String | none"
+      },
+      "keys": {
+        "call": "t Set.keys end",
+        "args": [
+          "t:trie"
+        ],
+        "returns": "List<String>",
+        "note": "sorted"
+      },
+      "size": {
+        "call": "t Set.size end",
+        "args": [
+          "t:trie"
+        ],
+        "returns": "Integer"
+      },
+      "height": {
+        "call": "t Set.height end",
+        "args": [
+          "t:trie"
+        ],
+        "returns": "Integer",
+        "note": "structural depth; per-variant, not comparable across variants"
+      },
+      "from-keys": {
+        "call": "keys Set.from-keys end",
+        "args": [
+          "keys:List<String>"
+        ],
+        "returns": "trie",
+        "note": "inverse of keys"
+      },
+      "encode": {
+        "call": "t Set.encode end",
+        "args": [
+          "t:trie"
+        ],
+        "returns": "String",
+        "note": "JSON snapshot (StructUtil.jsonify of {kind, size, keys})"
+      },
+      "decode": {
+        "call": "s Set.decode end",
+        "args": [
+          "s:String"
+        ],
+        "returns": "trie",
+        "note": "inverse of encode; raises a catchable error if the payload kind does not match this variant"
+      }
     },
     "set_trie_only": {
-      "within":         { "call": "t query k Set.within end",     "args": ["t:trie", "query:String", "k:Integer"],     "returns": "List<String>", "note": "Levenshtein distance <= k; TrieSet only" },
-      "match":          { "call": "t pattern Set.match end",      "args": ["t:trie", "pattern:String"],                "returns": "List<String>", "note": "wildcard: ? = one char, * = any run; TrieSet only" }
+      "within": {
+        "call": "t query k Set.within end",
+        "args": [
+          "t:trie",
+          "query:String",
+          "k:Integer"
+        ],
+        "returns": "List<String>",
+        "note": "Levenshtein distance <= k; TrieSet only"
+      },
+      "match": {
+        "call": "t pattern Set.match end",
+        "args": [
+          "t:trie",
+          "pattern:String"
+        ],
+        "returns": "List<String>",
+        "note": "wildcard: ? = one char, * = any run; TrieSet only"
+      }
     },
     "map": {
-      "make":                { "call": "Map.make end",                       "args": [],                                                  "returns": "trie" },
-      "set":                 { "call": "t key value Map.set end",            "args": ["t:trie", "key:String", "value:Any"],               "returns": "trie", "note": "persistent; rebind. Value may be any type (incl. word-like strings)." },
-      "get":                 { "call": "t key Map.get end",                  "args": ["t:trie", "key:String"],                            "returns": "Any | none" },
-      "has":                 { "call": "t key Map.has end",                  "args": ["t:trie", "key:String"],                            "returns": "Boolean" },
-      "delete":              { "call": "t key Map.delete end",               "args": ["t:trie", "key:String"],                            "returns": "trie", "note": "persistent; no-op if absent" },
-      "keys-with-prefix":    { "call": "t prefix Map.keys-with-prefix end",  "args": ["t:trie", "prefix:String"],                         "returns": "List<String>", "note": "sorted" },
-      "entries-with-prefix": { "call": "t prefix Map.entries-with-prefix end","args": ["t:trie", "prefix:String"],                        "returns": "List<[String, Any]>", "note": "sorted by key" },
-      "longest-prefix":      { "call": "t key Map.longest-prefix end",       "args": ["t:trie", "key:String"],                            "returns": "String | none" },
-      "keys":                { "call": "t Map.keys end",                     "args": ["t:trie"],                                          "returns": "List<String>", "note": "sorted" },
-      "values":              { "call": "t Map.values end",                   "args": ["t:trie"],                                          "returns": "List<Any>", "note": "in key-sorted order" },
-      "entries":             { "call": "t Map.entries end",                  "args": ["t:trie"],                                          "returns": "List<[String, Any]>", "note": "sorted by key" },
-      "size":                { "call": "t Map.size end",                     "args": ["t:trie"],                                          "returns": "Integer" },
-      "height":              { "call": "t Map.height end",                   "args": ["t:trie"],                                          "returns": "Integer", "note": "structural depth; per-variant" },
-      "from-entries":        { "call": "entries Map.from-entries end",       "args": ["entries:List<[String, Any]>"],                     "returns": "trie", "note": "inverse of entries" },
-      "encode":              { "call": "t Map.encode end",                   "args": ["t:trie"],                                          "returns": "String", "note": "JSON snapshot (StructUtil.jsonify of {kind, size, entries}); a stored none serialises as null and decodes back to none" },
-      "decode":              { "call": "s Map.decode end",                   "args": ["s:String"],                                        "returns": "trie", "note": "inverse of encode; raises a catchable error if the payload kind does not match this variant" }
+      "make": {
+        "call": "Map.make end",
+        "args": [],
+        "returns": "trie"
+      },
+      "set": {
+        "call": "t key value Map.set end",
+        "args": [
+          "t:trie",
+          "key:String",
+          "value:Any"
+        ],
+        "returns": "trie",
+        "note": "persistent; rebind. Value may be any type (incl. word-like strings)."
+      },
+      "get": {
+        "call": "t key Map.get end",
+        "args": [
+          "t:trie",
+          "key:String"
+        ],
+        "returns": "Any | none"
+      },
+      "has": {
+        "call": "t key Map.has end",
+        "args": [
+          "t:trie",
+          "key:String"
+        ],
+        "returns": "Boolean"
+      },
+      "delete": {
+        "call": "t key Map.delete end",
+        "args": [
+          "t:trie",
+          "key:String"
+        ],
+        "returns": "trie",
+        "note": "persistent; no-op if absent"
+      },
+      "keys-with-prefix": {
+        "call": "t prefix Map.keys-with-prefix end",
+        "args": [
+          "t:trie",
+          "prefix:String"
+        ],
+        "returns": "List<String>",
+        "note": "sorted"
+      },
+      "entries-with-prefix": {
+        "call": "t prefix Map.entries-with-prefix end",
+        "args": [
+          "t:trie",
+          "prefix:String"
+        ],
+        "returns": "List<[String, Any]>",
+        "note": "sorted by key"
+      },
+      "longest-prefix": {
+        "call": "t key Map.longest-prefix end",
+        "args": [
+          "t:trie",
+          "key:String"
+        ],
+        "returns": "String | none"
+      },
+      "keys": {
+        "call": "t Map.keys end",
+        "args": [
+          "t:trie"
+        ],
+        "returns": "List<String>",
+        "note": "sorted"
+      },
+      "values": {
+        "call": "t Map.values end",
+        "args": [
+          "t:trie"
+        ],
+        "returns": "List<Any>",
+        "note": "in key-sorted order"
+      },
+      "entries": {
+        "call": "t Map.entries end",
+        "args": [
+          "t:trie"
+        ],
+        "returns": "List<[String, Any]>",
+        "note": "sorted by key"
+      },
+      "size": {
+        "call": "t Map.size end",
+        "args": [
+          "t:trie"
+        ],
+        "returns": "Integer"
+      },
+      "height": {
+        "call": "t Map.height end",
+        "args": [
+          "t:trie"
+        ],
+        "returns": "Integer",
+        "note": "structural depth; per-variant"
+      },
+      "from-entries": {
+        "call": "entries Map.from-entries end",
+        "args": [
+          "entries:List<[String, Any]>"
+        ],
+        "returns": "trie",
+        "note": "inverse of entries"
+      },
+      "encode": {
+        "call": "t Map.encode end",
+        "args": [
+          "t:trie"
+        ],
+        "returns": "String",
+        "note": "JSON snapshot (StructUtil.jsonify of {kind, size, entries}); a stored none serialises as null and decodes back to none"
+      },
+      "decode": {
+        "call": "s Map.decode end",
+        "args": [
+          "s:String"
+        ],
+        "returns": "trie",
+        "note": "inverse of encode; raises a catchable error if the payload kind does not match this variant"
+      }
     },
     "map_trie_only": {
-      "within":              { "call": "t query k Map.within end",           "args": ["t:trie", "query:String", "k:Integer"],             "returns": "List<String>", "note": "Levenshtein distance <= k; TrieMap only; returns keys" },
-      "match":               { "call": "t pattern Map.match end",            "args": ["t:trie", "pattern:String"],                        "returns": "List<String>", "note": "wildcard ?/*; TrieMap only; returns keys" }
+      "within": {
+        "call": "t query k Map.within end",
+        "args": [
+          "t:trie",
+          "query:String",
+          "k:Integer"
+        ],
+        "returns": "List<String>",
+        "note": "Levenshtein distance <= k; TrieMap only; returns keys"
+      },
+      "match": {
+        "call": "t pattern Map.match end",
+        "args": [
+          "t:trie",
+          "pattern:String"
+        ],
+        "returns": "List<String>",
+        "note": "wildcard ?/*; TrieMap only; returns keys"
+      }
     }
   },
   "namespaces": {
-    "TrieSet":  { "kind": "set", "module": "trie.aql",  "specs": ["set", "set_trie_only"] },
-    "TrieMap":  { "kind": "map", "module": "trie.aql",  "specs": ["map", "map_trie_only"] },
-    "RadixSet": { "kind": "set", "module": "radix.aql", "specs": ["set"] },
-    "RadixMap": { "kind": "map", "module": "radix.aql", "specs": ["map"] },
-    "TstSet":   { "kind": "set", "module": "tst.aql",   "specs": ["set"] },
-    "TstMap":   { "kind": "map", "module": "tst.aql",   "specs": ["map"] },
-    "BurstSet": { "kind": "set", "module": "burst.aql", "specs": ["set"] },
-    "BurstMap": { "kind": "map", "module": "burst.aql", "specs": ["map"] }
+    "TrieSet": {
+      "kind": "set",
+      "module": "trie.aql",
+      "specs": [
+        "set",
+        "set_trie_only"
+      ]
+    },
+    "TrieMap": {
+      "kind": "map",
+      "module": "trie.aql",
+      "specs": [
+        "map",
+        "map_trie_only"
+      ]
+    },
+    "RadixSet": {
+      "kind": "set",
+      "module": "radix.aql",
+      "specs": [
+        "set"
+      ]
+    },
+    "RadixMap": {
+      "kind": "map",
+      "module": "radix.aql",
+      "specs": [
+        "map"
+      ]
+    },
+    "TstSet": {
+      "kind": "set",
+      "module": "tst.aql",
+      "specs": [
+        "set"
+      ]
+    },
+    "TstMap": {
+      "kind": "map",
+      "module": "tst.aql",
+      "specs": [
+        "map"
+      ]
+    },
+    "BurstSet": {
+      "kind": "set",
+      "module": "burst.aql",
+      "specs": [
+        "set"
+      ]
+    },
+    "BurstMap": {
+      "kind": "map",
+      "module": "burst.aql",
+      "specs": [
+        "map"
+      ]
+    }
   }
 }
