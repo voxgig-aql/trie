@@ -1,0 +1,190 @@
+name: tests
+
+# The trie utilities are written in AQL, so CI builds the `aql` interpreter
+# from source before running anything. AQL has no tagged release yet and has
+# shipped breaking changes between commits, so we pin AQL_REF to the exact
+# commit this library is verified against. Bump it (and re-run the suites
+# locally) when adopting a newer aql.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # aql-lang/aql @ main (latest). We track main on an iterative-improvement
+  # track with upstream, re-pinning to the newest HEAD and retesting (see
+  # AQL-MAIN-VERIFICATION.md). The interpreter is the supported path; `aql
+  # check` is now clean (0 errors) on the suites and modules; `--force-compile`
+  # is opt-in and still partial (deferred emitter/code-body work).
+  AQL_REF: 618562025d9e0154107306927911a8b1b046333c
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out trie
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      # The compiled binary only depends on AQL_REF (and the OS), so a hit
+      # here lets us skip the clone + build entirely.
+      - name: Cache aql binary
+        id: cache-aql
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/bin/aql
+          key: aql-${{ env.AQL_REF }}-${{ runner.os }}
+
+      - name: Check out aql source
+        if: steps.cache-aql.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: aql-lang/aql
+          ref: ${{ env.AQL_REF }}
+          path: aql-src
+
+      # The documented `go install …/cmd/go/aql@latest` cannot work while
+      # cmd/go/go.mod carries replace directives, so we build from the clone
+      # with -mod=mod instead.
+      - name: Build aql
+        if: steps.cache-aql.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          cd aql-src/cmd/go
+          GOWORK=off GOFLAGS=-mod=mod go build \
+            -ldflags "-X github.com/aql-lang/aql/cmd/go.Version=${AQL_REF}" \
+            -o "$HOME/.local/bin/aql" ./aql
+
+      - name: Add aql to PATH
+        run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Report aql version
+        run: aql -version
+
+      # Each suite ends with `0 test.fail-count end assert.equal`, so a
+      # failure makes aql exit non-zero and fails the step.
+      #
+      # INTERPRETER IS A HARD GATE for every suite — the supported execution
+      # path, and always green.
+      - name: Unit tests — interpreter (HARD GATE)
+        run: |
+          for f in trie radix tst burst; do
+            echo "::group::aql test/${f}_unit_test.aql"
+            aql "test/${f}_unit_test.aql"
+            echo "::endgroup::"
+          done
+      - name: Unit spec — standard trie (interpreter)
+        run: aql test/trie_unit_spec.aql
+
+      - name: Property tests — standard trie (spec)
+        run: aql test/trie_prop_spec.aql
+      - name: Property tests — standard trie (direct)
+        run: aql test/trie_prop_test.aql
+      - name: Property tests — radix tree
+        run: aql test/radix_prop_spec.aql
+      - name: Property tests — ternary search tree
+        run: aql test/tst_prop_spec.aql
+      - name: Property tests — burst trie
+        run: aql test/burst_prop_spec.aql
+
+      - name: Smoke demo
+        run: aql test/trie_smoke_test.aql
+
+      # Static check — HARD GATE. `aql check` exits non-zero on any
+      # error-level diagnostic. The upstream checker-precision work (gradual
+      # `Any` carriers, `/r` reference-export use-tracing, the `do{}`-param and
+      # dynamic-`set` fixes) landed, so every suite AND every module now checks
+      # 0 errors — what used to be ~150–300 false positives per module. Gating
+      # here guards against a regression on either side. (`unused_def` and
+      # similar live at warning level and do not fail the step.)
+      # Verified clean on the pinned ref; see AQL-MAIN-VERIFICATION.md §8 and
+      # upstream design/CLIENT-VERIFICATION-MAIN-2026-06-24.md.
+      - name: Static check — suites + modules (HARD GATE, 0 errors)
+        run: |
+          for f in test/*.aql trie.aql radix.aql tst.aql burst.aql; do
+            echo "::group::aql check $f"
+            aql check "$f"
+            echo "::endgroup::"
+          done
+
+      # Bytecode compiler (`--force-compile`, the strict path that refuses
+      # rather than falling back) — ADVISORY, and steadily improving upstream.
+      # As of the pinned ref all four `*_prop_spec` suites compile (the `each`
+      # and dynamic-help `check diagnostics` refusals are gone); the remaining
+      # frontier is `fold`/`each`/`test-test` code-bodies, `loop results as fn
+      # args` (Stage 3), and one `unknown provenance` case — tracked, deferred
+      # upstream emitter work (design/COMPILABLE-SUBSET.md; proposals/aql-full-
+      # compilation.md). `--compile` (silent interpreter fallback) matches the
+      # interpreter on every suite, so this is a coverage gap, not a
+      # correctness bug. Promote to a gate once the emitter closes those words.
+      - name: Bytecode compiler — suites (advisory)
+        continue-on-error: true
+        run: |
+          for f in test/*.aql; do
+            echo "::group::aql --force-compile $f"
+            aql --force-compile "$f" || echo "::warning::--force-compile refused for $f (deferred upstream)"
+            echo "::endgroup::"
+          done
+
+  # Lightweight guard for the agent-skill packaging and the pinned-ref single
+  # source of truth (no aql needed). The plugin must bundle its own copy of the
+  # skill — plugins can't point at an external .claude/skills dir — so two
+  # copies exist and can drift; and the aql commit is pinned in several files
+  # that must agree.
+  consistency:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out trie
+        uses: actions/checkout@v4
+
+      - name: SKILL.md copies are in sync
+        run: |
+          canonical=.claude/skills/trie-aql/SKILL.md
+          bundled=plugins/trie-aql/skills/trie-aql/SKILL.md
+          if ! diff -u "$canonical" "$bundled"; then
+            echo "::error file=$bundled::Plugin skill has drifted from $canonical"
+            echo "Fix by copying the canonical skill over the bundled one:"
+            echo "  cp $canonical $bundled"
+            exit 1
+          fi
+          echo "SKILL.md copies are identical."
+
+      - name: JSON manifests are valid
+        run: |
+          for j in .claude-plugin/marketplace.json \
+                   plugins/trie-aql/.claude-plugin/plugin.json \
+                   api.json; do
+            if python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$j"; then
+              echo "ok: $j"
+            else
+              echo "::error file=$j::invalid JSON"
+              exit 1
+            fi
+          done
+
+      # The pinned aql commit lives in several files; they must agree or a
+      # session/CI builds a different interpreter than the one this library is
+      # verified against (the exact drift this repo previously had between its
+      # hook and CI). .github/workflows/test.yml's env.AQL_REF (full 40-char) is the single
+      # source of truth; api.json stores a short prefix, so compare by prefix.
+      - name: Pinned aql ref is consistent across files
+        run: |
+          ref='${{ env.AQL_REF }}'
+          fail=0
+          hook_ref=$(grep -oE 'AQL_REF=[0-9a-f]{7,40}' .claude/hooks/session-start.sh | head -1 | cut -d= -f2)
+          if [ "$hook_ref" != "$ref" ]; then
+            echo "::error file=.claude/hooks/session-start.sh::AQL_REF=$hook_ref != .github/workflows/test.yml AQL_REF=$ref"
+            fail=1
+          fi
+          api_ref=$(python3 -c "import json;print(json.load(open('api.json'))['aql_ref'])")
+          if [ "${ref:0:${#api_ref}}" != "$api_ref" ]; then
+            echo "::error file=api.json::aql_ref=$api_ref is not a prefix of .github/workflows/test.yml AQL_REF=$ref"
+            fail=1
+          fi
+          [ "$fail" = 0 ] && echo "ok: pinned aql ref consistent ($ref; api.json prefix $api_ref)"
+          exit $fail
