@@ -37,7 +37,7 @@ sweeps) still deliver a solid speedup:
 | 1000 | 14.06 s | 3.78 s | 3.72× |
 | 2000 | 34.88 s | 11.86 s | 2.94× |
 
-(single clean run, `aql` @ `203ea2f`; re-run `bench/run.sh` for local figures)
+(single clean run, `aql` @ `6185620`; re-run `bench/run.sh` for local figures)
 
 Scaling is roughly linear in `N` (slightly superlinear because `with-prefix`
 collects a growing key set). The **~3× compiled speedup comes entirely from the

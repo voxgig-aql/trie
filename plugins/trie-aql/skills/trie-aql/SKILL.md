@@ -7,7 +7,7 @@ description: Use when writing or editing AQL code that calls this trie / prefix-
 
 Fast prefix search, autocomplete, and longest-prefix matching over String
 keys, as a **set** of keys or a **map** from keys to values, in four
-interchangeable variants. Everything below is verified against `aql @ db828ec`.
+interchangeable variants. Everything below is verified against `aql @ 6185620`.
 
 ## Import
 

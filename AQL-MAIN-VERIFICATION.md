@@ -2,13 +2,13 @@
 
 **Date:** 2026-06-23, last retested 2026-07-11
 **aql tested:** `main` @ `f8ee6426` → `65410b18` → `14036b41` → `407fedad` →
-`0721e828` → **`203ea2f`** (current pin), all built from source
-**aql currently pinned:** `203ea2f0b059b14b8264002288336e86dd3b378f`
+`0721e828` → **`6185620`** (current pin), all built from source
+**aql currently pinned:** `618562025d9e0154107306927911a8b1b046333c`
 **Library:** `voxgig-aql/trie` (standard trie + radix / tst / burst variants)
 
-> **CURRENT STATE (`203ea2f` + 3 landed upstream fixes, 2026-07-11) — see
+> **CURRENT STATE (`6185620` + 3 landed upstream fixes, 2026-07-11) — see
 > [§11](#11-three-stage-d-fixes-landed-upstream-remaining-frontier-precisely-scoped).**
-> Re-pinned to the newest `main`, `203ea2f` (PR #260, forward-args auto-eval).
+> Re-pinned to the newest `main`, `6185620` (PR #260, forward-args auto-eval).
 > **Both hard CI gates are green**: interpreter 11/11 suites, `aql check` 0
 > errors across all 11 suites + 4 modules. Three of the Stage-D leaves §10
 > diagnosed now have **landed fixes** on the aql branch
@@ -18,7 +18,7 @@
 > clean-fallback**, every suite **stdout-byte-identical** interpreter-vs-`--compile`
 > and green. §11 records the landed fixes, the residual frontier (one recursive
 > branch-join provenance bug, root-caused; plus the deferred `test-test`/`each`
-> emitter words), and why the pin stays `203ea2f` (fixes are on a branch, not yet
+> emitter words), and why the pin stays `6185620` (fixes are on a branch, not yet
 > merged to `main`). §10 is the prior (pre-fix) root-cause map; §9 (`0721e828`)
 > the retest before it.
 
@@ -519,13 +519,13 @@ Library change this round: one line in `test/trie_prop_test.aql`
 
 ---
 
-## 10. Retest at `203ea2f` — `--force-compile` frontier fully unmasked
+## 10. Retest at `6185620` — `--force-compile` frontier fully unmasked
 
-Re-pinned to **`203ea2f`** (latest `main`, PR #260 "forward-args auto-eval").
+Re-pinned to **`6185620`** (latest `main`, PR #260 "forward-args auto-eval").
 Built directly from source (`cd cmd/go && make build`). Both hard gates green;
 `--force-compile` root-caused end to end.
 
-### State on `203ea2f`
+### State on `6185620`
 
 | Mode | Result |
 |---|---|
@@ -580,7 +580,7 @@ were incidentally hiding* — the clean refusal fell back to the sound
 interpreter, so the broken lowering never ran. Clearing the outer leaves
 unhides the inner ones. Because the pair converts a **sound refusal → a broken
 compile** (a `compile == interpret` violation, the project's one hard contract),
-**neither fix is landed here.** The `aql` tree is left at pristine `203ea2f`.
+**neither fix is landed here.** The `aql` tree is left at pristine `6185620`.
 
 This is precisely the "Stage D is the project, highest-risk" frontier that
 `aql`'s own `design/VOXGIG-COMPILE-COMPLETION-PLAN.0.md` scopes: the leaves are
@@ -638,7 +638,7 @@ codec block instead of seating it at a wrong fixed count — so the shape falls
 back soundly rather than miscompiling. The `compile == interpret` hard contract
 holds.
 
-### Trie compile state on `203ea2f` + the three fixes
+### Trie compile state on `6185620` + the three fixes
 
 Built the aql branch from source (`cd cmd/go && make build`) and re-swept every
 suite under `--no-compile`, `--compile`, and `--force-compile`. **Every suite's
@@ -712,7 +712,7 @@ the §10 STORE_LOCAL / `np`-miss crashes are gone).
 
 The three fixes live on the aql **branch** `claude/voxgig-aql-baseline-pctxto`,
 **not on `main`**. This repo pins `AQL_REF` to `main`, so the pin **stays at
-`203ea2f`** (the current tip of `main`) — a branch commit must not become the
+`6185620`** (the current tip of `main`) — a branch commit must not become the
 pin, or CI would build unmergeable history. Re-pin to the fixes' `main` commit
 once the aql PR merges, and re-run this sweep to promote whichever suites then
 compile natively.

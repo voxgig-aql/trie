@@ -16,7 +16,7 @@ fi
 
 log() { echo "[session-start] $*" >&2; }
 
-AQL_REF=203ea2f0b059b14b8264002288336e86dd3b378f
+AQL_REF=618562025d9e0154107306927911a8b1b046333c
 BIN_DIR="$HOME/.local/bin"
 AQL="$BIN_DIR/aql"
 
@@ -42,7 +42,7 @@ else
   if git clone --quiet https://github.com/aql-lang/aql "$src" \
      && git -C "$src" checkout --quiet "$AQL_REF"; then
     ( cd "$src/cmd/go" \
-      && GOFLAGS=-mod=mod go build \
+      && GOWORK=off GOFLAGS=-mod=mod go build \
            -ldflags "-X github.com/aql-lang/aql/cmd/go.Version=${AQL_REF}" \
            -o "$AQL" ./aql ) \
       && log "Built $("$AQL" -version 2>/dev/null)." \

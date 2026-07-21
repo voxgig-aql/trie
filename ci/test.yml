@@ -17,7 +17,7 @@ env:
   # AQL-MAIN-VERIFICATION.md). The interpreter is the supported path; `aql
   # check` is now clean (0 errors) on the suites and modules; `--force-compile`
   # is opt-in and still partial (deferred emitter/code-body work).
-  AQL_REF: 203ea2f0b059b14b8264002288336e86dd3b378f
+  AQL_REF: 618562025d9e0154107306927911a8b1b046333c
 
 jobs:
   test:
@@ -56,7 +56,7 @@ jobs:
         run: |
           mkdir -p "$HOME/.local/bin"
           cd aql-src/cmd/go
-          GOFLAGS=-mod=mod go build \
+          GOWORK=off GOFLAGS=-mod=mod go build \
             -ldflags "-X github.com/aql-lang/aql/cmd/go.Version=${AQL_REF}" \
             -o "$HOME/.local/bin/aql" ./aql
 
