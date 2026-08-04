@@ -1,10 +1,10 @@
-# Developer-experience report: building the trie utilities in AQL
+# Developer-experience report: building the trie utilities in boru
 
 This is a first-hand account of writing this library — four trie variants,
-eight namespaces, ~2000 lines of AQL plus tests — against `aql` at commit
+eight namespaces, ~2000 lines of boru plus tests — against `boru` at commit
 `b6617dd` (2026-06-01). It records what worked, what cost me time, and the
 workarounds I settled on, in the hope it is useful both to the next person
-writing AQL data structures and to the language authors.
+writing boru data structures and to the language authors.
 
 > **Postscript (upgraded to `db828ec`, 2026-06-06).** Some sharp edges below
 > were since fixed upstream, and the library was updated accordingly:
@@ -12,7 +12,7 @@ writing AQL data structures and to the language authors.
 > *boxing* workaround was removed; failing `Test.test` cases now surface
 > loudly by name (#5-adjacent DX). Others still stand. The upgrade also
 > brought breaking renames: `concat`/`indexof`/`contains` moved to
-> `aql:string-util`, the test module is now `Test.*`/`Assert.*`, and `base`
+> `boru:string-util`, the test module is now `Test.*`/`Assert.*`, and `base`
 > joined the reserved words — none a language *fault*, just churn to track.
 
 > **Postscript 2 (upgraded to `958c379b`, 2026-06-11).** The language team
@@ -26,7 +26,7 @@ writing AQL data structures and to the language authors.
 > handful of *new* papercuts found during this upgrade are at the bottom:
 > [Second upgrade review](#second-upgrade-review-958c379b-2026-06-11).
 
-The headline: AQL is genuinely capable of expressing persistent, recursive
+The headline: boru is genuinely capable of expressing persistent, recursive
 data structures cleanly, and once the idioms are in hand the code reads
 well. Getting the idioms in hand, though, took a lot of empirical probing,
 because several behaviours are surprising and fail *silently* or with an
@@ -37,7 +37,7 @@ error pointing somewhere other than the cause.
 ## What worked well
 
 - **Recursion with pattern-matched overloads.** Trie traversal is naturally
-  recursive, and AQL handles direct self-recursion and mutual recursion
+  recursive, and boru handles direct self-recursion and mutual recursion
   without ceremony. This is the backbone of every variant.
 - **Multiple namespaces per module.** `export "A" {…}` twice in one file
   gives a clean `A.x` / `B.x` split, which let each variant ship a `…Set`
@@ -48,7 +48,7 @@ error pointing somewhere other than the cause.
   fight. I verified this explicitly (a `push` onto a shared list does not
   disturb other references).
 - **The property-testing framework.** `test.prop` / `test.check-prop` with
-  `aql:rand` generators made it easy to cross-check the four variants
+  `boru:rand` generators made it easy to cross-check the four variants
   against each other over random inputs. This caught real differences.
 - **Error messages often point at the fix.** The recurring hint *"forward
   args for X may have run into the next word; group the call with parens"*
@@ -207,7 +207,7 @@ it.
 
 When the brief asked for four variants, I implemented a **burst trie** for
 the fourth and explicitly declined a **HAMT** (hash array-mapped trie). It
-is worth recording *why*, because the answer is more nuanced than "AQL
+is worth recording *why*, because the answer is more nuanced than "boru
 can't do it" and it points at a few concrete language gaps. (The facts
 below were confirmed against the source and quick probes at `b6617dd`; I
 did not build a HAMT end to end, so the "only blocker" claim in Level A is
@@ -223,9 +223,9 @@ memory layout*: a contiguous, O(1)-indexed array that is cheap to copy
 
 Crucially, a HAMT indexes children by an integer **slot**, not by a
 dynamic string key. So it sidesteps the limitation that shaped every other
-variant here (AQL can't build maps with computed keys, and `refine Object`
+variant here (boru can't build maps with computed keys, and `refine Object`
 fields aren't enumerable) — integer-indexed `List`s cover it. That makes
-the HAMT *more* expressible in AQL than I first assumed. The question
+the HAMT *more* expressible in boru than I first assumed. The question
 splits cleanly into two levels.
 
 ### Level A — to express a *correct, persistent* HAMT
@@ -261,7 +261,7 @@ GC'd, value-semantics language cannot deliver a HAMT's performance
 advantage without:
 
 1. **Mutable, fixed-width, unboxed arrays** with an in-place O(1)
-   `set`/`insert` contract. AQL has indexed `set` *only* on the separate
+   `set`/`insert` contract. boru has indexed `set` *only* on the separate
    `Array` type, not on plain `List`s (`[10 20 30]` is a `List` and `set`
    rejects it), and the mutation-vs-copy contract isn't exposed. This is
    what enables the *transient* fast path (à la Clojure) that makes bulk
@@ -273,17 +273,17 @@ advantage without:
    (HAMT/CHAMP-backed), the way Clojure, Scala, and Erlang ship one. Then
    `make`/`get`/`set`/`merge` over a large map become O(log₃₂ n) with
    structural sharing and user code never touches a bitmap — and, as a
-   bonus, this would also retire AQL's dynamic-key-map limitation.
+   bonus, this would also retire boru's dynamic-key-map limitation.
 
 ### Takeaway
 
 For *expressiveness*, add `popcount` (ideally also `insert-at`/`remove-at`
-and unsigned-int clarity) and a HAMT becomes a reasonable pure-AQL
+and unsigned-int clarity) and a HAMT becomes a reasonable pure-boru
 exercise. For *HAMT-class performance*, that is a runtime decision: ship a
 native persistent map, and/or add mutable unboxed fixed-width arrays with
 transients. The burst trie was the pragmatic stand-in precisely because it
 trades the bitmap-packing trick for flat buckets — and buckets are just
-`List`s, which AQL represents naturally.
+`List`s, which boru represents naturally.
 
 
 ## Suggestions, in priority order
@@ -304,9 +304,9 @@ trades the bitmap-packing trick for flat buckets — and buckets are just
 
 ---
 
-## Static checking (`aql check`)
+## Static checking (`boru check`)
 
-`aql check` is wired into CI as an **advisory, non-gating** step (`--soft` +
+`boru check` is wired into CI as an **advisory, non-gating** step (`--soft` +
 `continue-on-error`), not a hard gate. This library is deliberately generic —
 every node is a plain Map walked by stack-dispatched words, and the namespace
 surface is exported by reference (`map-add/r`, …) — so the structural checker
@@ -314,15 +314,15 @@ can't trace those reference exports or the dynamic dispatch, and reports false
 `unused_def`/`no_signature` diagnostics on code the suites prove correct. The
 runnable suites are the real gate. The full per-module catalogue of what the
 checker reports and why each report is a false positive lives in
-[`AQL-CHECK-REPORT.md`](AQL-CHECK-REPORT.md) — project-specific evidence to
-re-run on each aql bump, not template-core.
+[`boru-CHECK-REPORT.md`](boru-CHECK-REPORT.md) — project-specific evidence to
+re-run on each boru bump, not template-core.
 
 ---
 
 ## Bottom line
 
 I shipped four working, cross-checked, persistent trie variants with fuzzy
-and wildcard search in AQL, so the language is clearly up to the task. The
+and wildcard search in boru, so the language is clearly up to the task. The
 friction was almost entirely in *discovering* the idioms, not in expressing
 the algorithms — and nearly every hour lost went to a behaviour that failed
 quietly instead of loudly. Louder failures and a handful of docs notes would
@@ -332,11 +332,11 @@ turn a sometimes-bewildering experience into a smooth one.
 
 ## Second upgrade review (`958c379b`, 2026-06-11)
 
-This library was re-verified and refactored against `aql` `958c379b` —
+This library was re-verified and refactored against `boru` `958c379b` —
 110 commits past the previous `db828ec` pin. The language team had
 re-verified this report item by item against their `main` (see
-`design/VOXGIG-DX-REPORT.5.md` and `design/VOXGIG-AQL-REPORTS.5.md` in the
-aql repo) and shipped a remarkable amount of it. Everything below was then
+`design/VOXGIG-DX-REPORT.5.md` and `design/VOXGIG-boru-REPORTS.5.md` in the
+boru repo) and shipped a remarkable amount of it. Everything below was then
 confirmed first-hand while upgrading: every status is backed by this repo's
 suites running green at the new pin, or by a minimal probe.
 
@@ -344,7 +344,7 @@ suites running green at the new pin, or by a minimal probe.
 
 | # | Issue (2026-06-01) | Status at `958c379b` | Done here |
 |---|---|---|---|
-| 1 | Namespace dispatch type-miss fails **silently** | ✅ **fixed** — the runtime raises `[aql/uncalled_function]` at the end-of-run drain with the call-site span; `aql check` also flags `uncalled_function` and a `forward_strands_operand` advisory | nothing to change — the costliest trap in this report is gone |
+| 1 | Namespace dispatch type-miss fails **silently** | ✅ **fixed** — the runtime raises `[aql/uncalled_function]` at the end-of-run drain with the call-site span; `boru check` also flags `uncalled_function` and a `forward_strands_operand` advisory | nothing to change — the costliest trap in this report is gone |
 | 2 | `fold` binds `[element accumulator]` | 📖 documented upstream (`describe fold` + REFERENCE callout); behaviour unchanged | fold bodies untouched |
 | 3 | `merge` is a deep, index-wise merge | 🟠 still deep *by design*, but `merge` **left core** (now `StructUtil.merge`) and `StructUtil.setpath` is the copy-returning one-field update | nodes still rebuilt with `mk-*` constructors |
 | 4 | `do {…}` evaluated map values as code | ✅ stayed fixed | — |
@@ -384,7 +384,7 @@ suites running green at the new pin, or by a minimal probe.
   and is not `eq` to the equal-looking literal; pass it through
   `convert String` before comparing.
 - **No in-memory jsonic parser** — ✅ fixed: `StructUtil.parse` decodes
-  jsonic/JSON text (loud `parse_error` on garbage), `Vm.parse` parses AQL
+  jsonic/JSON text (loud `parse_error` on garbage), `Vm.parse` parses boru
   source. Adopted: every namespace now ships **`decode`**, the true inverse
   of `encode`, closing the round-trip this report asked for. Two *new
   papercuts* found wiring it up:
@@ -403,12 +403,12 @@ suites running green at the new pin, or by a minimal probe.
 Level A is now unblocked exactly as the case study asked: **`popcount`
 landed** (`BinUtil.popcount`, alongside `clz`/`ctz`/`bitlen`/`mask`/…) and
 **`insert-at`/`remove-at` landed** (`ArrayUtil`, copy-returning, loud on
-out-of-range). A correct persistent HAMT is now a reasonable pure-AQL
+out-of-range). A correct persistent HAMT is now a reasonable pure-boru
 exercise — it would slot in as a fifth variant behind the same `…Set`/`…Map`
 surface (hash the key, bit-slice with `bsr`/`band`, index the packed child
 list by `popcount(bitmap & (bit-1))`). What this library does *not* get from
 it today is the payoff: Level B (mutable unboxed fixed-width arrays /
-layout guarantees / a native persistent map) is unchanged, so a pure-AQL
+layout guarantees / a native persistent map) is unchanged, so a pure-boru
 HAMT would be a demonstration, not a speedup. The new `FlexMap`/`FlexList`
 mutable Node containers and constructible `make Array` inch toward the
 transient story, but the layout guarantees that make a HAMT *fast* are
@@ -423,8 +423,8 @@ should expect to track on an unpinned `main`:
 | Change | Effect here |
 |---|---|
 | `node` is a reserved built-in word | every module failed at call time (`[aql/reserved_word]`); bindings renamed to `nd` |
-| `aql:string-util` went **subject-last** | the pbt suite's stack-form `StringUtil.contains` silently flipped to needle-vs-needle; call rewritten (haystack pushed first) |
-| `merge` moved out of core into `aql:struct-util` | no effect (this library never merges nodes — see #3) |
+| `boru:string-util` went **subject-last** | the pbt suite's stack-form `StringUtil.contains` silently flipped to needle-vs-needle; call rewritten (haystack pushed first) |
+| `merge` moved out of core into `boru:struct-util` | no effect (this library never merges nodes — see #3) |
 | `refine Object` removed (class/object split) | no effect (never used here) |
 | Digit-led stack words renamed (`2dup` → `dup2`, …) | no effect (never used here) |
 | Map/structure print form changed (jsonic single-quote style) | the pbt `encode`-shape property updated along with the `jsonify` switch |
@@ -432,7 +432,7 @@ should expect to track on an unpinned `main`:
 ### Suggestions from the original report, all four accounted for
 
 1. **Surface silent dispatch failures** — ✅ shipped (runtime
-   `uncalled_function` + three new `aql check` diagnostics).
+   `uncalled_function` + three new `boru check` diagnostics).
 2. **A shallow field-update word** — ✅ resolved as `StructUtil.setpath`
    (an `assoc`/`with` alias was explicitly rejected as duplication — fine).
 3. **Document the gotchas** — ✅ landed as a docs batch (fold order, merge
@@ -452,7 +452,7 @@ tested upgrade.
 
 ## Third upgrade review (`5aed3834`, 2026-06-18)
 
-Migrated against `aql` `7193a7d3` — 39 commits past `958c379b` — then
+Migrated against `boru` `7193a7d3` — 39 commits past `958c379b` — then
 re-verified and re-pinned at `5aed3834`, a *further* 298 commits on. That
 second jump is dominated by an in-progress **bytecode compiler** (the
 newest commit is a "checker/bytecode-compiler architecture review and
@@ -462,7 +462,7 @@ headline of the migration window is the **native map-iteration work**
 (`each`/`for-each`/`fold`/`filter` gained Map overloads, the `KeyVal` entry
 type landed, and `keys`/`vals` became core words), plus a batch of DX fixes
 the language team shipped in response to a *different* consumer's report
-(`voxgig-aql/decision/dx-report.md`) — several of which also close
+(`voxgig-boru/decision/dx-report.md`) — several of which also close
 papercuts this library logged in round 2. Every status below is backed by
 this repo's ten suites running green at the pin, or a minimal probe.
 
@@ -514,7 +514,7 @@ on construction path.)
   `decode`'s `do […] error […]` guard.
 - **Errors carry location across an import boundary.** An error raised
   inside an imported `fn` now renders with the *module* file's name, line,
-  and caret (`--> /path/mod.aql:row:col`) instead of losing its position —
+  and caret (`--> /path/mod.boru:row:col`) instead of losing its position —
   exactly the fidelity entry-file errors already had. This matters because
   the whole library is consumed via `import`; a downstream `decode` raise
   now points into `trie.aql`, not nowhere.
@@ -537,11 +537,11 @@ on construction path.)
   the flex-transient build pattern robust without hand-`flex`-ing every
   child — strengthening the "FlexMap is the transient twin" half of the
   persistent-map discussion below.
-- **`canon` word** — round-trippable canonical AQL source for any value
+- **`canon` word** — round-trippable canonical boru source for any value
   (`{end:false kids:{a:1} val:none}`). An alternative to this library's
   JSON-targeted `encode`; not adopted (we want portable JSON text), but a
   clean inspection/snapshot tool.
-- **`aql check` gained positions.** Diagnostics now carry `row:col` and an
+- **`boru check` gained positions.** Diagnostics now carry `row:col` and an
   explicit `[info]`/`[warning]`/`[error]` severity (the round-2 re-run
   complained of position-less reports). The false-positive *classes* and
   *volume* are unchanged, so the advisory-only verdict stands — see the
@@ -604,15 +604,15 @@ which is the only reason it's interesting here.
 
 The library refuses in two layers, in this order:
 
-1. **`aql check` gates first.** `--force-compile` runs the static checker
+1. **`boru check` gates first.** `--force-compile` runs the static checker
    and aborts on any **error-level** diagnostic (`error: force-compile:
    check diagnostics`) before the emitter even runs (warnings do not
    block it). Checking a *library module* directly trips ~900 documented
    `check` **false positives** (generic stack-dispatch + reference-exported
-   namespaces — see `AQL-CHECK-REPORT.md`), so compiling code that pulls a
+   namespaces — see `boru-CHECK-REPORT.md`), so compiling code that pulls a
    whole module in at that granularity is refused here regardless of what
    the emitter could do. (A *test file* that merely imports the library is
-   far cleaner — `aql check test/<x>_unit_test.aql` reports 0 errors, only
+   far cleaner — `boru check test/<x>_unit_test.aql` reports 0 errors, only
    `unused_def` warnings — so the check gate is not what blocks the unit
    suites; the emitter is.)
 
@@ -657,7 +657,7 @@ second wall, and squarely in-progress compiler work.
 The emitter table above was the *starting* state. The four imperative unit
 suites (`trie/radix/tst/burst_unit_test.aql`) are now written to stay
 inside what the bytecode compiler can lower, so each runs green **three
-ways** — interpreter, `aql check` (0 errors), and `--force-compile` — and
+ways** — interpreter, `boru check` (0 errors), and `--force-compile` — and
 CI gates all three (`ci/test.yml`). Two small, behaviour-preserving changes
 did it, and they map cleanly onto two distinct emitter limitations worth
 recording:

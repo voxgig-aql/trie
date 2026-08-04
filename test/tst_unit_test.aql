@@ -1,4 +1,4 @@
-# Ternary-search-tree tests using aql:test's imperative API.
+# Ternary-search-tree tests using boru:test's imperative API.
 #
 # Runs identically under the interpreter, `aql check`, and the bytecode
 # compiler:
@@ -7,7 +7,7 @@
 #   aql --force-compile test/tst_unit_test.aql
 
 
-import "aql:test"
+import "boru:test"
 import "./tst.aql"
 
 

@@ -1,13 +1,13 @@
 # Using the trie library (agent guide)
 
-Guidance for an AI coding agent **using** this AQL trie library (in this repo or
+Guidance for an AI coding agent **using** this boru trie library (in this repo or
 a downstream project) and **extending** it. Human docs: `README.md`, `docs/`
 (Diátaxis), full signatures in `docs/reference.md`, machine-readable API in
-`api.json`, design notes and AQL foot-guns in `dx-report.md`.
+`api.json`, design notes and boru foot-guns in `dx-report.md`.
 
-The four modules depend only on the **standard `aql:struct-util` module**
+The four modules depend only on the **standard `boru:struct-util` module**
 (map enumeration + jsonic parse/serialise), which ships with the interpreter —
-no third-party dependencies. Verified against `aql` commit `6185620`.
+no third-party dependencies. Verified against `boru` commit `6185620`.
 
 ---
 
@@ -16,15 +16,15 @@ no third-party dependencies. Verified against `aql` commit `6185620`.
 **Vendor (simplest).** Copy the four module files (`trie.aql`, `radix.aql`,
 `tst.aql`, `burst.aql`) into the consumer project, e.g. `lib/trie/`, then:
 
-```aql
+```boru
 import "./lib/trie/trie.aql"
 ```
 
-Imports resolve **relative to the working directory** (where you invoke `aql`),
-*not* the importing file — so run `aql` from the project root and write paths
+Imports resolve **relative to the working directory** (where you invoke `boru`),
+*not* the importing file — so run `boru` from the project root and write paths
 relative to it.
 
-**Registry.** If published: `aql install trie-<version>`, then `import "trie"`
+**Registry.** If published: `boru install trie-<version>`, then `import "trie"`
 loads the package `main` (`trie.aql` → `TrieMap`/`TrieSet`); import other
 variants by their file.
 
@@ -74,7 +74,7 @@ Each module is self-contained — vendor only the variant(s) you use.
 - **Tries are immutable.** `add` / `set` / `delete` return a *new* trie and
   leave the input unchanged — **always rebind the result**:
 
-  ```aql
+  ```boru
   def t1 (t0 "cat" TrieSet.add)   # t0 is unchanged; use t1
   ```
 
@@ -96,7 +96,7 @@ The variants are behaviourally identical (the property suite cross-checks them);
 
 ## Essential patterns (copy-paste, runnable)
 
-```aql
+```boru
 import "./trie.aql"
 
 # Forward canonical (key forward, receiver LAST); rebind — tries are immutable.
@@ -186,7 +186,7 @@ Exact call-forms, arg order, and return types: `api.json` (structured) and
 8. An **empty `TstSet`/`TstMap` is `none`**, not a Map — only relevant if you
    inspect the raw trie value rather than calling namespace words.
 9. To compare two key lists, use **`deq`** (structural deep equality) or
-   `Assert.equal` in tests — **AQL's `eq` on lists is identity, not structural**
+   `Assert.equal` in tests — **boru's `eq` on lists is identity, not structural**
    (`["a"] ["a"] eq` is `false`, `["a"] ["a"] deq` is `true`).
 10. A value read back through `decode` compares equal under `eq`/`deq`, but a
     decoded `none` (JSON `null` hydrated) is **not** `Assert.equal` to the
@@ -196,23 +196,23 @@ Exact call-forms, arg order, and return types: `api.json` (structured) and
 
 ## Verifying your code
 
-Build/locate `aql`, then run a scratch script or the suites:
+Build/locate `boru`, then run a scratch script or the suites:
 
 ```bash
-aql path/to/your_script.aql        # run your code
-aql test/trie_smoke_test.aql                  # library smoke demo across all variants
-for f in test/*.aql; do aql "$f"; done   # full suite (each ends "all green")
+boru path/to/your_script.aql        # run your code
+boru test/trie_smoke_test.aql                  # library smoke demo across all variants
+for f in test/*.aql; do boru "$f"; done   # full suite (each ends "all green")
 ```
 
 In this repo a SessionStart hook (`.claude/settings.json` →
-`.claude/hooks/session-start.sh`) builds `aql` from the pinned commit if needed
+`.claude/hooks/session-start.sh`) builds `boru` from the pinned commit if needed
 and runs the smoke check, so a fresh session is ready to verify.
 
 ---
 
 ## Extending the library (contributors)
 
-Read `dx-report.md` for the full account; the load-bearing AQL traps are:
+Read `dx-report.md` for the full account; the load-bearing boru traps are:
 
 - **Children are computed-key Maps** (`{[k]: v}` literals, copy-returning
   `kids set (ch) child`, `StructUtil.items` enumeration — items is
@@ -238,7 +238,7 @@ Read `dx-report.md` for the full account; the load-bearing AQL traps are:
 - **Signature order = reverse of call order** (first parameter = top of stack).
   A namespace word whose top-of-stack type doesn't match no longer fails
   silently — the runtime raises `uncalled_function` at end of run, and
-  `aql check` flags it — but still write the intended call form in a comment.
+  `boru check` flags it — but still write the intended call form in a comment.
 - **Reserved binding names**: `end` (call terminator), **`node`** (a
   built-in word since the Flex-container work — this library names node
   bindings `nd`), and — since the native map-iteration work (`7193a7d3`) —
@@ -252,7 +252,7 @@ Read `dx-report.md` for the full account; the load-bearing AQL traps are:
   a *literal* key (JS `.key`), a parenthesised one is *computed* (JS `[expr]`).
   This is defined semantics now, not a bug.
 - **Build path strings with core `add`** (`pfx ch add`); `concat`/`indexof`/
-  `contains` live in `aql:string-util`, which is now **subject-last**
+  `contains` live in `boru:string-util`, which is now **subject-last**
   (`StringUtil.contains needle haystack` forward; haystack pushed first in
   stack form).
 - **`fold` binds `[element accumulator]`** (element first, accumulator on top).

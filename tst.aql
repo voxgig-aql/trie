@@ -34,9 +34,9 @@
 # separate a call from a following bare literal.
 #
 # Imported via `import "./tst.aql"`. The only dependency is the standard
-# `aql:struct-util` module (jsonic parsing for `decode`).
+# `boru:struct-util` module (jsonic parsing for `decode`).
 
-import "aql:struct-util"
+import "boru:struct-util"
 
 
 # --- node construction ----------------------------------------------

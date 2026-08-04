@@ -1,5 +1,5 @@
 #!/bin/bash
-# SessionStart hook: ensure the `aql` interpreter is available so the agent can
+# SessionStart hook: ensure the `boru` interpreter is available so the agent can
 # run this library's scripts and tests. AQL has no tagged release, so we build
 # it from source at the commit this library is pinned to (the same ref CI uses).
 #
@@ -16,7 +16,7 @@ fi
 
 log() { echo "[session-start] $*" >&2; }
 
-AQL_REF="${AQL_REF:-$(git ls-remote https://github.com/aql-lang/aql.git main 2>/dev/null | cut -f1)}"
+BORU_REF="${BORU_REF:-$(git ls-remote https://github.com/boru-lang/boru.git main 2>/dev/null | cut -f1)}"
 BIN_DIR="$HOME/.local/bin"
 AQL="$BIN_DIR/aql"
 
@@ -26,13 +26,13 @@ if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
 fi
 export PATH="$BIN_DIR:$PATH"
 
-# Track aql-lang/aql main: rebuild unless the reported version matches the
+# Track boru-lang/boru main: rebuild unless the reported version matches the
 # resolved main HEAD (or main couldn't be resolved — then reuse what's present).
-have_ver="$("$AQL" -version 2>/dev/null || aql -version 2>/dev/null || true)"
-if [ -n "$have_ver" ] && { [ "${have_ver#aql }" = "$AQL_REF" ] || [ -z "$AQL_REF" ]; }; then
+have_ver="$("$AQL" -version 2>/dev/null || boru -version 2>/dev/null || true)"
+if [ -n "$have_ver" ] && { [ "${have_ver#aql }" = "$BORU_REF" ] || [ -z "$BORU_REF" ]; }; then
   log "aql already present ($have_ver); skipping build."
 else
-  if [ -z "$AQL_REF" ]; then
+  if [ -z "$BORU_REF" ]; then
     log "WARNING: could not resolve aql main HEAD (network?) and no usable aql present; see docs/how-to.md."
     exit 0
   fi
@@ -40,15 +40,15 @@ else
     log "WARNING: Go toolchain not found; cannot build aql. Install Go, or build aql manually (see docs/how-to.md)."
     exit 0
   fi
-  log "Building aql @ $AQL_REF from source (one-time; cached afterwards)…"
+  log "Building aql @ $BORU_REF from source (one-time; cached afterwards)…"
   mkdir -p "$BIN_DIR"
   src="$(mktemp -d)"
-  if git clone --quiet https://github.com/aql-lang/aql "$src" \
-     && git -C "$src" checkout --quiet "$AQL_REF"; then
+  if git clone --quiet https://github.com/boru-lang/boru "$src" \
+     && git -C "$src" checkout --quiet "$BORU_REF"; then
     ( cd "$src/cmd/go" \
       && GOWORK=off GOFLAGS=-mod=mod go build \
-           -ldflags "-X github.com/aql-lang/aql/cmd/go.Version=${AQL_REF}" \
-           -o "$AQL" ./aql ) \
+           -ldflags "-X github.com/boru-lang/boru/cmd/go.Version=${BORU_REF}" \
+           -o "$AQL" ./boru ) \
       && log "Built $("$AQL" -version 2>/dev/null)." \
       || log "WARNING: aql build failed; see docs/how-to.md to build manually."
   else
@@ -61,7 +61,7 @@ fi
 # session on a check error.
 if [ -x "$AQL" ] && [ -f "$CLAUDE_PROJECT_DIR/test/trie_smoke_test.aql" ]; then
   if ( cd "$CLAUDE_PROJECT_DIR" && "$AQL" test/trie_smoke_test.aql >/dev/null 2>&1 ); then
-    log "Smoke check passed (aql test/trie_smoke_test.aql)."
+    log "Smoke check passed (boru test/trie_smoke_test.aql)."
   else
     log "NOTE: smoke check did not pass; toolchain may be incomplete."
   fi

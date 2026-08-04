@@ -23,7 +23,7 @@ natural:
 
 A trie is the right tool when prefixes matter. When they don't — when you
 only need set membership and want to spend the least possible memory — a
-hash set or a [bloom filter](https://github.com/aql-lang) is a better fit.
+hash set or a [bloom filter](https://github.com/boru-lang) is a better fit.
 
 ---
 
@@ -92,7 +92,7 @@ value) until a bucket exceeds the burst limit, at which point it
 the next character. The trie spine stays shallow while most keys live in
 buckets that are cheap to scan — the idea behind the cache-conscious
 HAT-trie. (A true bitmap/array-mapped trie wants fixed-width bit vectors,
-which AQL's data model does not offer; the burst trie is the member of
+which boru's data model does not offer; the burst trie is the member of
 that family that maps cleanly onto lists and maps.)
 
 ### Picking one
@@ -111,7 +111,7 @@ decision is reversible with a one-line change.
 `add`, `set`, and `delete` return a *new* trie and never mutate the input.
 Each rebuilds only the nodes along the edited path; untouched subtrees are
 shared by reference. This makes tries safe to keep old versions of, pass
-around, and reason about, and it fits AQL's value-oriented data model —
+around, and reason about, and it fits boru's value-oriented data model —
 maps and lists behave as values, so "mutate in place" is not the natural
 idiom here.
 
@@ -120,7 +120,7 @@ idiom here.
 A node's children are a real map — keyed by character in the standard and
 burst tries, and by an edge label's first character in the radix tree
 (whose invariant guarantees those are distinct). Lookup is a direct
-`kids get (ch)`, updates are AQL's copy-returning Map `set` (which is what
+`kids get (ch)`, updates are boru's copy-returning Map `set` (which is what
 keeps the structure persistent), and `StructUtil.items` enumerates the
 children as **key-sorted** pairs. That sorted enumeration is load-bearing:
 a node emits its own key before descending, and children are visited in
@@ -128,7 +128,7 @@ character order, so every listing word produces sorted output *by
 construction*, with no final sort.
 
 Earlier versions of this library stored children as association lists of
-`[char, child]` pairs, because AQL then had no way to build or walk a map
+`[char, child]` pairs, because boru then had no way to build or walk a map
 with computed keys. That language gap — reported in `DX-REPORT.md` — was
 closed upstream (`{[k]: v}` literals, copy-returning Map `set`,
 `StructUtil.items`), and the workaround is retired. One asymmetry remains:

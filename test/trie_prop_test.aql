@@ -1,6 +1,6 @@
 # Property-based tests for the standard trie — DIRECT-CODE FORM.
 #
-# This file exercises aql:test's imperative property surface: the
+# This file exercises boru:test's imperative property surface: the
 # `Test.check-prop` driver, called directly with explicit run / seed /
 # shrink counts —
 #
@@ -16,15 +16,15 @@
 #   aql test/trie_prop_test.aql
 
 
-import "aql:test"
-import "aql:string-util"
+import "boru:test"
+import "boru:string-util"
 import "./trie.aql"
 
 
 def charset "abcdefghijklmnopqrstuvwxyz"
 
 
-# Distinct elements of `xs` (replaces aql:array's array.unique): rebuild a
+# Distinct elements of `xs` (replaces boru:array's array.unique): rebuild a
 # TrieSet from the keys and read its keys back — unique (and sorted).
 def uniq fn [ [xs:List] [List] [ (xs TrieSet.from-keys) TrieSet.keys ] ]
 

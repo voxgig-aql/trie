@@ -1,18 +1,18 @@
-# Verifying the trie library against `aql` main — interpret / check / compile
+# Verifying the trie library against `boru` main — interpret / check / compile
 
 **Date:** 2026-06-23, last retested 2026-07-11
-**aql tested:** `main` @ `f8ee6426` → `65410b18` → `14036b41` → `407fedad` →
+**boru tested:** `main` @ `f8ee6426` → `65410b18` → `14036b41` → `407fedad` →
 `0721e828` → **`6185620`** (current pin), all built from source
-**aql currently pinned:** `618562025d9e0154107306927911a8b1b046333c`
-**Library:** `voxgig-aql/trie` (standard trie + radix / tst / burst variants)
+**boru currently pinned:** `618562025d9e0154107306927911a8b1b046333c`
+**Library:** `voxgig-boru/trie` (standard trie + radix / tst / burst variants)
 
 > **CURRENT STATE (`6185620` + 3 landed upstream fixes, 2026-07-11) — see
 > [§11](#11-three-stage-d-fixes-landed-upstream-remaining-frontier-precisely-scoped).**
 > Re-pinned to the newest `main`, `6185620` (PR #260, forward-args auto-eval).
-> **Both hard CI gates are green**: interpreter 11/11 suites, `aql check` 0
+> **Both hard CI gates are green**: interpreter 11/11 suites, `boru check` 0
 > errors across all 11 suites + 4 modules. Three of the Stage-D leaves §10
-> diagnosed now have **landed fixes** on the aql branch
-> `claude/voxgig-aql-baseline-pctxto` (commit `3e94429`) — including the do-catch
+> diagnosed now have **landed fixes** on the boru branch
+> `claude/voxgig-boru-baseline-pctxto` (commit `3e94429`) — including the do-catch
 > fix that resolves the "not safe to land alone" regression §10 warned about.
 > With them, the trie suites split **4 fully native-compiled / 5 sound
 > clean-fallback**, every suite **stdout-byte-identical** interpreter-vs-`--compile`
@@ -24,21 +24,21 @@
 
 ## Task
 
-Download the latest `aql` from `main`, then confirm that **interpreting**,
-**checking** (`aql check`), and **compiling** (`aql --force-compile`, the
+Download the latest `boru` from `main`, then confirm that **interpreting**,
+**checking** (`boru check`), and **compiling** (`boru --force-compile`, the
 bytecode VM) all work fully against this library.
 
 ## Verdict
 
 | Mode | Command | Result |
 |---|---|---|
-| **Interpreting** | `aql <suite>.aql` | ✅ **Works fully** — all 11 suites green |
-| **Checking** | `aql check <suite>.aql` | ❌ **Broken** — error-level diagnostics on every suite |
-| **Compiling** | `aql --force-compile <suite>.aql` | ❌ **Blocked** — aborts on `check diagnostics` before the emitter runs |
+| **Interpreting** | `boru <suite>.aql` | ✅ **Works fully** — all 11 suites green |
+| **Checking** | `boru check <suite>.aql` | ❌ **Broken** — error-level diagnostics on every suite |
+| **Compiling** | `boru --force-compile <suite>.aql` | ❌ **Blocked** — aborts on `check diagnostics` before the emitter runs |
 
 Only interpreting works fully on `main`. Checking and compiling regressed in
 the `c44d994f → f8ee6426` window — **not** because of anything in this
-library, but because `aql check` changed shape (see below). On the pinned
+library, but because `boru check` changed shape (see below). On the pinned
 `c44d994f`, all three modes work fully.
 
 ---
@@ -67,16 +67,16 @@ A real step forward in this window. On the pinned `c44d994f`, a bare
 `fold` / `each` body refused to lower:
 
 ```
-$ aql --force-compile fold.aql      # c44d994f
+$ boru --force-compile fold.aql      # c44d994f
 error: force-compile: fn fold$body: result above a literal (Stage 3)
 ```
 
 On `main`, the same programs compile and run on the VM:
 
 ```
-$ aql --force-compile fold.aql      # main: 0 [1 2 3] [var[[x acc] acc x add]] fold
+$ boru --force-compile fold.aql      # main: 0 [1 2 3] [var[[x acc] acc x add]] fold
 6
-$ aql --force-compile each.aql      # main: [1 2 3] each [var[[x] x 1 add]]
+$ boru --force-compile each.aql      # main: [1 2 3] each [var[[x] x 1 add]]
 [2, 3, 4]
 ```
 
@@ -84,26 +84,26 @@ This is the exact Stage-3 gap that kept the property and spec suites
 interpreter-only. The compiler has closed it — so those suites *would* now be
 compilable, were it not for the regression in §3.
 
-### 3. `aql check` became transitive — and that breaks check **and** compile
+### 3. `boru check` became transitive — and that breaks check **and** compile
 
-`main`'s `aql check` "drives the same engine in carrier mode — so checking
+`main`'s `boru check` "drives the same engine in carrier mode — so checking
 stays in lockstep with runtime dispatch" (CLI.md). Concretely, **check now
 follows `import`s and analyses the imported module**, so a consumer inherits
 the library's diagnostics.
 
 A two-line script that only imports the library demonstrates the change:
 
-```aql
+```boru
 import "./trie.aql"
 ((TrieSet.make) "x" TrieSet.add) "x" TrieSet.has print end
 ```
 
-| aql | `aql check` on that script |
+| boru | `boru check` on that script |
 |---|---|
 | `c44d994f` (pinned) | `0 error(s), 0 warning(s)` |
 | `f8ee6426` (main)   | `28 error(s)` |
 
-The library modules' own counts rose too: `aql check trie.aql` went from
+The library modules' own counts rose too: `boru check trie.aql` went from
 **106 → 190** errors.
 
 The four imperative unit suites — engineered to be **0-error** on `c44d994f`
@@ -117,7 +117,7 @@ imported library:
 | `tst_unit_test`   | 70 `no_signature` |
 | `burst_unit_test` | 28 `no_signature` |
 
-Every one is a **documented false positive** (see `AQL-CHECK-REPORT.md`):
+Every one is a **documented false positive** (see `boru-CHECK-REPORT.md`):
 
 - `no_signature` on `Any`-typed dynamic dispatch — the diagnostics point at
   library internals (`get`, `find-kid`, `trie-insert`, `mk-node`,
@@ -148,7 +148,7 @@ So on `main`, every suite fails with:
 error: force-compile: check diagnostics
 ```
 
-There is no bypass: `--soft` applies to `aql check`, not to `run` /
+There is no bypass: `--soft` applies to `boru check`, not to `run` /
 `--force-compile`; there is no "don't follow imports" flag. The emitter's new
 `fold`/`each` support (§2) cannot be reached because the transitive check
 errors (§3) gate it out first.
@@ -157,7 +157,7 @@ errors (§3) gate it out first.
 
 ## Root cause and blast radius
 
-The transitive `aql check` is the single cause of both failures. It is an
+The transitive `boru check` is the single cause of both failures. It is an
 **upstream change**, not a library regression — this library's own test files
 remain clean of their *own* diagnostics; the errors are inherited from the
 imported module.
@@ -169,7 +169,7 @@ library is currently **uncheckable and uncompilable for any downstream
 consumer** on `main`. That is a far larger blast radius than before.
 
 This sharpens — does not change — the standing wishlist from
-`AQL-CHECK-REPORT.md` (items 1–4): until `aql check` can distinguish this
+`boru-CHECK-REPORT.md` (items 1–4): until `boru check` can distinguish this
 library's deliberate dynamic dispatch from a real error
 (trace `/r` reference-exports, unify `Any` with concrete params, resolve
 `do{}` quotation params, declare `Returns` on core words), the transitive
@@ -194,9 +194,9 @@ check blocks check and compile for the whole ecosystem downstream of it.
 
 ```bash
 # Build main
-git clone https://github.com/aql-lang/aql /tmp/aql-src
-git -C /tmp/aql-src checkout f8ee64269fa10f6a0c1b2d9b953ad904a9e7e51d
-( cd /tmp/aql-src/cmd/go && GOFLAGS=-mod=mod go build -o /tmp/aql-main ./aql )
+git clone https://github.com/boru-lang/boru /tmp/boru-src
+git -C /tmp/boru-src checkout f8ee64269fa10f6a0c1b2d9b953ad904a9e7e51d
+( cd /tmp/boru-src/cmd/go && GOFLAGS=-mod=mod go build -o /tmp/aql-main ./boru )
 
 # 1. interpret — green
 for f in test/*.aql; do /tmp/aql-main "$f" >/dev/null && echo "PASS $f"; done
@@ -209,7 +209,7 @@ for f in trie radix tst burst; do /tmp/aql-main --force-compile "test/${f}_unit_
 
 # the change in one probe:
 printf 'import "./trie.aql"\n((TrieSet.make) "x" TrieSet.add) "x" TrieSet.has print end\n' > /tmp/imp.aql
-aql            check /tmp/imp.aql   # c44d994f → 0 errors
+boru            check /tmp/imp.aql   # c44d994f → 0 errors
 /tmp/aql-main  check /tmp/imp.aql   # f8ee6426 → 28 errors
 ```
 
@@ -226,10 +226,10 @@ blocked by the transitive-import check.
 | Mode | `f8ee6426` | `65410b18` |
 |---|---|---|
 | Interpreting (11 suites) | ✅ green | ✅ green |
-| `aql check` import-only probe | 28 errors | **28 errors** (unchanged) |
-| `aql check` unit suites (trie/radix/tst/burst) | 17 / 58 / 70 / 28 | **17 / 58 / 70 / 28** (unchanged) |
+| `boru check` import-only probe | 28 errors | **28 errors** (unchanged) |
+| `boru check` unit suites (trie/radix/tst/burst) | 17 / 58 / 70 / 28 | **17 / 58 / 70 / 28** (unchanged) |
 | `--force-compile` unit suites | ❌ `check diagnostics` | ❌ `check diagnostics` |
-| `aql check trie.aql` (module direct) | 190 errors | **150 errors** |
+| `boru check trie.aql` (module direct) | 190 errors | **150 errors** |
 | bare `fold` / `each` `--force-compile` | ✅ `6` / `[2,3,4]` | ✅ `6` / `[2,3,4]` |
 
 **What moved:** the library's *own* `check` error count fell from 190 to
@@ -238,31 +238,31 @@ blocked by the transitive-import check.
 
 **What did not move:** the transitive-import check is identical (an
 import-only script still inherits 28 errors from the library), so it still
-gates both `aql check` and `--force-compile` on every suite. The emitter is
+gates both `boru check` and `--force-compile` on every suite. The emitter is
 still healthy (`fold`/`each` lower and run), and still unreachable behind the
 check gate for any program that imports the library.
 
 **Conclusion holds:** keep the pin at `c44d994f`. Adopting `main` still waits
 on the transitive-check change no longer surfacing imported-module
 diagnostics as gating errors, or on the library's documented false-positive
-classes being resolved upstream (`AQL-CHECK-REPORT.md` wishlist 1–4).
+classes being resolved upstream (`boru-CHECK-REPORT.md` wishlist 1–4).
 
 ### Access note
 
 The session's git credential relay began returning **403 for
-`aql-lang/aql`** (`git fetch`/`clone` of that repo), though it worked earlier
+`boru-lang/boru`** (`git fetch`/`clone` of that repo), though it worked earlier
 in the session. GitHub egress itself is allowed (a direct HTTPS request
 returns 200), so this run fetched `main` via the public source tarball
-(`https://codeload.github.com/aql-lang/aql/tar.gz/<sha>`) and built from
+(`https://codeload.github.com/boru-lang/boru/tar.gz/<sha>`) and built from
 that. Re-pinning still only needs the commit SHA, which the GitHub API
-(`/repos/aql-lang/aql/commits/main`) returns.
+(`/repos/boru-lang/boru/commits/main`) returns.
 
 ---
 
 ## 6. Retest at `14036b412` — upstream acted on this report
 
 Re-ran against `main` @ `14036b4125a9ccbd9655503a1a4171c008d93d06`. **The
-aql team read this very report** (plus the `decision` and `bloom-filter`
+boru team read this very report** (plus the `decision` and `bloom-filter`
 client reports) and shipped a batch of checker/compiler fixes —
 documented upstream in `design/CLIENT-FIXES-2026-06-24.md`. The headline is
 the **gradual-`Any`** change (`0d297b84b`, "checker: gradual (dynamic)
@@ -274,7 +274,7 @@ failing `no_signature`.
 
 ### Checking — sharply reduced (but not yet zero)
 
-| `aql check` | `f8ee6426`/`65410b18` | `14036b412` |
+| `boru check` | `f8ee6426`/`65410b18` | `14036b412` |
 |---|---:|---:|
 | import-only probe | 28 | **5** |
 | `trie_unit_test`  | 17 | **5** |
@@ -371,7 +371,7 @@ the check cascades, property suites by the emitter.
   dominate there (31/31/6 errors) so the change would not reach zero, and
   spreading a divergence for no net gain isn't worth it yet.
 - **CI:** interpreter is the **hard gate** for all suites (all green).
-  `aql check` and `--force-compile` over the unit suites are **advisory**
+  `boru check` and `--force-compile` over the unit suites are **advisory**
   (`continue-on-error`) while pinned to `main`; flip back to hard gates once
   a clean `main` lands.
 - **Pin:** `14036b412` across `ci/test.yml`, the SessionStart hook,
@@ -388,25 +388,25 @@ the check cascades, property suites by the emitter.
 
 ---
 
-## 8. Resolved upstream — `aql check` is clean; pin `407fedad`, check now gated
+## 8. Resolved upstream — `boru check` is clean; pin `407fedad`, check now gated
 
 The §7 "emergent whole-program cascades" are **gone**. Upstream landed the
 checker-precision work (gradual-`Any` carriers, `/r` reference-export
 use-tracing, recursive re-analysis suppression, dynamic-carrier / branch-merge
 / fold-seed matching, and the `build-row` body-reparse fix), independently
 re-verified across all three client libraries in
-[`design/CLIENT-VERIFICATION-MAIN-2026-06-24.md`](https://github.com/aql-lang/aql/blob/main/design/CLIENT-VERIFICATION-MAIN-2026-06-24.md).
+[`design/CLIENT-VERIFICATION-MAIN-2026-06-24.md`](https://github.com/boru-lang/boru/blob/main/design/CLIENT-VERIFICATION-MAIN-2026-06-24.md).
 
 Re-pinned to **`407fedad`** (latest `main`, a few commits past the doc's
 `0b010ae`) and re-verified here:
 
-| `407fedad` | interpret | `aql check` | `--force-compile` |
+| `407fedad` | interpret | `boru check` | `--force-compile` |
 |---|:--:|:--:|---|
 | all 11 suites | ✅ | **0 errors** | partial (advisory) |
 | `trie`/`radix`/`tst`/`burst`.aql (module-direct) | — | **0 errors** | — |
 
 That is down from the 150–300 errors per module the original
-`AQL-CHECK-REPORT.md` catalogued — its "these false positives are unfixable
+`boru-CHECK-REPORT.md` catalogued — its "these false positives are unfixable
 without upstream items 1–4" thesis is now **superseded**: items 1–4 all
 landed.
 
@@ -418,7 +418,7 @@ landed.
   restores cross-module consistency and the documented `do{}` idiom. (Upstream
   confirmed both forms check clean; neither fully `--force-compile`s, so the
   revert is purely a readability/consistency win.)
-- **CI: `aql check` promoted to a HARD GATE** over every suite *and* every
+- **CI: `boru check` promoted to a HARD GATE** over every suite *and* every
   module (all 0). The interpreter remains a hard gate. `--force-compile` stays
   **advisory**.
 - **Pin `407fedad`** across `ci/test.yml`, the hook, `api.json`, `AGENTS.md`,
@@ -452,7 +452,7 @@ a one-line library fix.
 
 ### Fetch note — GitHub blocked; built via the Go module proxy
 
-This session's egress to `aql-lang/aql` tightened further: `git`, `codeload`,
+This session's egress to `boru-lang/boru` tightened further: `git`, `codeload`,
 `github.com`, `api.github.com`, WebFetch, and the scoped GitHub MCP all return
 **403 / access-denied**; only `raw.githubusercontent.com` (single files)
 answers. The build was recovered through the **Go module proxy**
@@ -461,10 +461,10 @@ modules at a pseudo-version pinned to the HEAD commit.
 
 ```bash
 # proxy.golang.org resolves main -> v0.0.0-<utc>-<sha> and serves each module zip
-VER=$(curl -s https://proxy.golang.org/github.com/aql-lang/aql/@latest | jq -r .Version)
+VER=$(curl -s https://proxy.golang.org/github.com/boru-lang/boru/@latest | jq -r .Version)
 for m in cmd/go eng/go lang/go; do
-  curl -so $m.zip "https://proxy.golang.org/github.com/aql-lang/aql/$m/@v/$VER.zip"
-done   # unzip into repo layout (cmd/go replaces eng/go, lang/go via ../..) and `go build ./aql`
+  curl -so $m.zip "https://proxy.golang.org/github.com/boru-lang/boru/$m/@v/$VER.zip"
+done   # unzip into repo layout (cmd/go replaces eng/go, lang/go via ../..) and `go build ./boru`
 ```
 
 This is the reliable fallback when GitHub git/tarball access is policy-blocked
@@ -511,7 +511,7 @@ same two projects, one frontier further in.
 | Mode | Result |
 |---|---|
 | Interpreter (hard gate) | ✅ 11/11 green |
-| `aql check` (hard gate) | ✅ 0 errors — all 11 suites + 4 modules |
+| `boru check` (hard gate) | ✅ 0 errors — all 11 suites + 4 modules |
 | `--force-compile` (advisory) | 4 compile, 7 refuse (frontier above) |
 
 Library change this round: one line in `test/trie_prop_test.aql`
@@ -530,7 +530,7 @@ Built directly from source (`cd cmd/go && make build`). Both hard gates green;
 | Mode | Result |
 |---|---|
 | Interpreter (hard gate) | ✅ 11/11 suites green |
-| `aql check` (hard gate) | ✅ 0 errors — 11 suites + 4 modules |
+| `boru check` (hard gate) | ✅ 0 errors — 11 suites + 4 modules |
 | `--force-compile` (advisory) | 4 `*_prop_spec` compile; the 7 imperative/smoke suites refuse — see below |
 
 No library source change was needed this round (the modules and suites are
@@ -538,7 +538,7 @@ unchanged; only the pin and this record moved).
 
 ### Unmasking the refusals
 
-`aql --force-compile` reports `code-body word <each|fold|test-test> (Stage 2)`
+`boru --force-compile` reports `code-body word <each|fold|test-test> (Stage 2)`
 for most suites, but that string is a **mask**: the higher-order body is
 probe-compiled in a throwaway `EmitState` (`callable_words.go` `recordClosureDispatch`)
 and the real refusal reason is discarded on decline. Instrumenting that probe
@@ -580,10 +580,10 @@ were incidentally hiding* — the clean refusal fell back to the sound
 interpreter, so the broken lowering never ran. Clearing the outer leaves
 unhides the inner ones. Because the pair converts a **sound refusal → a broken
 compile** (a `compile == interpret` violation, the project's one hard contract),
-**neither fix is landed here.** The `aql` tree is left at pristine `6185620`.
+**neither fix is landed here.** The `boru` tree is left at pristine `6185620`.
 
 This is precisely the "Stage D is the project, highest-risk" frontier that
-`aql`'s own `design/VOXGIG-COMPILE-COMPLETION-PLAN.0.md` scopes: the leaves are
+`boru`'s own `design/VOXGIG-COMPILE-COMPLETION-PLAN.0.md` scopes: the leaves are
 a *chain* per file, and the langspec differential is structurally blind to these
 off-corpus recursive-trie shapes, so each fix needs a hand-pinned
 `RunCompiledStrict`-vs-`Run` regression and the whole chain must land atomically.
@@ -615,9 +615,9 @@ trie walks themselves and widen the margin.
 ## 11. Three Stage-D fixes landed upstream; remaining frontier precisely scoped
 
 Follow-up to §10. The two fixes §10 identified were landed **together with a
-third** that resolves §10's "not safe to land alone" regression, on the aql
-branch `claude/voxgig-aql-baseline-pctxto` (commit `3e94429`, *"compiler: fix
-three Stage-D refusals surfaced by the trie suites"*). All aql pre-commit gates
+third** that resolves §10's "not safe to land alone" regression, on the boru
+branch `claude/voxgig-boru-baseline-pctxto` (commit `3e94429`, *"compiler: fix
+three Stage-D refusals surfaced by the trie suites"*). All boru pre-commit gates
 are green with them: **`make cover-gate` 100%** (54370/54370 reachable stmts),
 **`make verify-bytecode` PASSED** (the differential byte-identical corpus + the
 `-race` and args-aliasing pins), and `fmt`/`vet`/`lint`/`test` clean.
@@ -640,7 +640,7 @@ holds.
 
 ### Trie compile state on `6185620` + the three fixes
 
-Built the aql branch from source (`cd cmd/go && make build`) and re-swept every
+Built the boru branch from source (`cd cmd/go && make build`) and re-swept every
 suite under `--no-compile`, `--compile`, and `--force-compile`. **Every suite's
 stdout is byte-identical between the interpreter and `--compile`, and every
 assertion suite is green.** The split:
@@ -677,7 +677,7 @@ the §10 STORE_LOCAL / `np`-miss crashes are gone).
    real trigger is a **recursive fn whose branch-join accumulator diverges in
    type/identity across the fixpoint**. Minimal repro:
 
-   ```aql
+   ```boru
    def rec fn [
      [nd:Any key:Any consumed:Any best:Any] [Any] [
        if (nd eq none) [best] [
@@ -706,15 +706,15 @@ the §10 STORE_LOCAL / `np`-miss crashes are gone).
    provenance-recording one, then re-validate against the full byte-identical
    differential; it was **precisely diagnosed and deliberately not rushed** this
    round. (`radix.aql` `node-at` is the same shape.) Full trace + the other two
-   leaves: aql `design/VOXGIG-COMPILE-LEAVES.2.md` (aql-lang/aql#265).
+   leaves: boru `design/VOXGIG-COMPILE-LEAVES.2.md` (boru-lang/boru#265).
 
 ### Pin decision
 
-The three fixes live on the aql **branch** `claude/voxgig-aql-baseline-pctxto`,
-**not on `main`**. This repo pins `AQL_REF` to `main`, so the pin **stays at
+The three fixes live on the boru **branch** `claude/voxgig-boru-baseline-pctxto`,
+**not on `main`**. This repo pins `BORU_REF` to `main`, so the pin **stays at
 `6185620`** (the current tip of `main`) — a branch commit must not become the
 pin, or CI would build unmergeable history. Re-pin to the fixes' `main` commit
-once the aql PR merges, and re-run this sweep to promote whichever suites then
+once the boru PR merges, and re-run this sweep to promote whichever suites then
 compile natively.
 
 ## 12. Full native compilation — all suites compile, byte-identical
@@ -722,8 +722,8 @@ compile natively.
 Follow-up to §11. Every trie suite now compiles under `--force-compile` and is
 **byte-identical to the interpreter** under both `--compile` and
 `--force-compile` (all assertion suites green; the `_prop_spec` generators run
-to the same output). This was achieved with **behaviour-preserving AQL
-restructurings** that route around the aql compile leaves §11 and
+to the same output). This was achieved with **behaviour-preserving boru
+restructurings** that route around the boru compile leaves §11 and
 `design/VOXGIG-COMPILE-LEAVES.2.md` scope — NOT by weakening any test. Each
 change was verified interpreter-green + `--compile`==`--force-compile`==
 `--no-compile` byte-identical:
@@ -736,14 +736,14 @@ change was verified interpreter-green + `--compile`==`--force-compile`==
 | **L-EACH** (forward-stack-drift guard) | `trie_prop_test` summary | fold the per-result print instead of `each` |
 
 These are compile-friendliness workarounds, not the "right" fix: the maintainer's
-preferred path is to close the leaves in the aql emitter (see
+preferred path is to close the leaves in the boru emitter (see
 `design/VOXGIG-COMPILE-LEAVES.2.md`, which retains the minimal repros, traces,
 and order-of-attack). Revert each workaround in favour of the upstream compiler
 fix once it lands. The behaviour is identical either way; the workaround only
 changes WHICH engine runs the hot paths (compiled vs interpreter).
 
 **Important caveat.** The workarounds are the LIBRARY's route around the leaves;
-they do not fix the underlying aql compiler bugs, which remain real (L-JOIN's
+they do not fix the underlying boru compiler bugs, which remain real (L-JOIN's
 fixpoint provenance, L-NP's dynamic-scope read miss, the `RunCompiledReason`
 side-effect-duplication soundness gap that L-NP exposed). Any DIFFERENT downstream
 code hitting those shapes still falls back (or, for L-NP-class shapes, could

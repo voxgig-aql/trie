@@ -1,9 +1,9 @@
 # Tutorial: your first trie
 
-This is a hands-on lesson. By the end you will have built a small AQL
+This is a hands-on lesson. By the end you will have built a small boru
 script that stores a dictionary of words, autocompletes a prefix, and
 looks up a value — the core of what a trie is good for. You need no prior
-knowledge of tries, just a working `aql` binary (see
+knowledge of tries, just a working `boru` binary (see
 [How-to → Install and run](how-to.md#install-and-run-aql)) and this
 repository checked out.
 
@@ -19,10 +19,10 @@ Type the script into a file as we grow it, and run it after each step.
 We will start with the standard trie used as a **set** of words. Create a
 file `words.aql` next to `trie.aql`:
 
-```aql
+```boru
 import "./trie.aql"
 
-# AQL prints a program's first line last; one blank line up front keeps
+# boru prints a program's first line last; one blank line up front keeps
 # the rest of the output in source order.
 "" print
 
@@ -38,7 +38,7 @@ def t4 (t3 "dog"  TrieSet.add)
 Run it:
 
 ```console
-$ aql words.aql
+$ boru words.aql
 words: ['car' 'card' 'cat' 'dog']
 ```
 
@@ -53,7 +53,7 @@ trie stores keys in order.
 
 `TrieSet.has` answers membership exactly — no false positives:
 
-```aql
+```boru
 `cat?  ${(t4 "cat" TrieSet.has)}` print
 `ca?   ${(t4 "ca"  TrieSet.has)}` print
 `emu?  ${(t4 "emu" TrieSet.has)}` print
@@ -76,7 +76,7 @@ it. `emu` was never added, so `false`.
 This is the move tries are made for. `with-prefix` returns every key that
 starts with what the user has typed so far:
 
-```aql
+```boru
 `complete "ca": ${(t4 "ca"  TrieSet.with-prefix)}` print
 `complete "d":  ${(t4 "d"   TrieSet.with-prefix)}` print
 `complete "z":  ${(t4 "z"   TrieSet.with-prefix)}` print
@@ -99,7 +99,7 @@ Sometimes you have a long string and want the longest stored key that
 *starts* it — the heart of routing tables and tokenizers. Add the word
 `"car"` is already there; ask what prefixes `"cartoon"`:
 
-```aql
+```boru
 `longest of "cartoon": ${(t4 "cartoon" TrieSet.longest-prefix)}` print
 `longest of "cat":     ${(t4 "cat"     TrieSet.longest-prefix)}` print
 `longest of "emu":     ${(t4 "emu"     TrieSet.longest-prefix)}` print
@@ -123,7 +123,7 @@ Swap the set for a **map** when each key should carry a value. The only
 changes: use `TrieMap`, and `set` takes a value. Let us map each word to
 its length. Create `lengths.aql`:
 
-```aql
+```boru
 import "./trie.aql"
 "" print
 
@@ -157,7 +157,7 @@ The four variants share one API, so switching is a one-line change. Take
 the set script and swap the import and the namespace prefix for the radix
 tree:
 
-```aql
+```boru
 import "./radix.aql"       # was ./trie.aql
 "" print
 def t ((((( RadixSet.make) "cat" RadixSet.add) "car" RadixSet.add) "card" RadixSet.add) "dog" RadixSet.add)

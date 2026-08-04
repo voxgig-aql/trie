@@ -1,4 +1,4 @@
-# Radix-tree tests using aql:test's imperative API.
+# Radix-tree tests using boru:test's imperative API.
 #
 # Runs identically under the interpreter, `aql check`, and the bytecode
 # compiler:
@@ -7,7 +7,7 @@
 #   aql --force-compile test/radix_unit_test.aql
 
 
-import "aql:test"
+import "boru:test"
 import "./radix.aql"
 
 

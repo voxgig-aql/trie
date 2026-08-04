@@ -1,23 +1,23 @@
 ---
 name: trie-aql
-description: Use when writing or editing AQL code that calls this trie / prefix-tree library — TrieSet / TrieMap and the RadixSet/RadixMap, TstSet/TstMap, BurstSet/BurstMap variants (TrieSet.add / has / with-prefix / longest-prefix / within / match, TrieMap.set / get / entries …), or any file that does `import "./trie.aql"` (or radix/tst/burst). Provides the AQL forward-dispatch calling convention (which is not C/Python/JS) — the receiver (trie/set/map) is the LAST argument, so forward `TrieSet.add "cat" s` and pipe `s TrieSet.add "cat"` both bind but receiver-first `TrieSet.add s "cat"` misbinds — plus the persistent/immutable rebind rule, the shared Set/Map API across all four variants, verified copy-paste idioms, and fixes for the mistakes agents make most (mutating in place, foreign call syntax, the eq-vs-deq identity trap, reserved names like node/keys).
+description: Use when writing or editing boru code that calls this trie / prefix-tree library — TrieSet / TrieMap and the RadixSet/RadixMap, TstSet/TstMap, BurstSet/BurstMap variants (TrieSet.add / has / with-prefix / longest-prefix / within / match, TrieMap.set / get / entries …), or any file that does `import "./trie.aql"` (or radix/tst/burst). Provides the boru forward-dispatch calling convention (which is not C/Python/JS) — the receiver (trie/set/map) is the LAST argument, so forward `TrieSet.add "cat" s` and pipe `s TrieSet.add "cat"` both bind but receiver-first `TrieSet.add s "cat"` misbinds — plus the persistent/immutable rebind rule, the shared Set/Map API across all four variants, verified copy-paste idioms, and fixes for the mistakes agents make most (mutating in place, foreign call syntax, the eq-vs-deq identity trap, reserved names like node/keys).
 ---
 
-# Calling the trie utilities library (AQL)
+# Calling the trie utilities library (boru)
 
 Fast prefix search, autocomplete, and longest-prefix matching over String
 keys, as a **set** of keys or a **map** from keys to values, in four
-interchangeable variants. Everything below is verified against `aql @ 6185620`.
+interchangeable variants. Everything below is verified against `boru @ 6185620`.
 
 ## Import
 
-```aql
+```boru
 import "./trie.aql"        # or radix.aql / tst.aql / burst.aql
 ```
 
-- Paths resolve relative to the **working directory** you run `aql` from, not
-  the importing file. Run `aql` from the project root.
-- Each module is self-contained — it imports no `aql:*` dependencies.
+- Paths resolve relative to the **working directory** you run `boru` from, not
+  the importing file. Run `boru` from the project root.
+- Each module is self-contained — it imports no `boru:*` dependencies.
 
 ## Pick a variant (all share one API)
 
@@ -63,7 +63,7 @@ import "./trie.aql"        # or radix.aql / tst.aql / burst.aql
 
 ## Idioms (verified)
 
-```aql
+```boru
 import "./trie.aql"
 
 # Forward canonical (key forward, receiver LAST); rebind — tries are immutable.
@@ -86,12 +86,12 @@ def m (((TrieMap.make) "GET" 1 TrieMap.set) "POST" 2 TrieMap.set)
 
 | ✗ Don't | ✓ Do | Why |
 |---------|------|-----|
-| `t.add("x")` / `TrieSet.add(t,"x")` | `TrieSet.add "x" t` | AQL has no call/method syntax. |
+| `t.add("x")` / `TrieSet.add(t,"x")` | `TrieSet.add "x" t` | boru has no call/method syntax. |
 | `TrieSet.add t "x"` (receiver-first, all-forward) | `TrieSet.add "x" t` (receiver last) or `t TrieSet.add "x"` (pipe) | forward fills `key` first: receiver-first feeds `t` as the key → `signature_error`. |
 | reuse `t` after `TrieSet.add "x" t` | rebind: `def t2 (TrieSet.add "x" t)` | tries are persistent; `add` returns a new trie. |
 | `merge` to update a node | rebuild with the explicit `mk-*` constructor; `StructUtil.setpath` for one field | `StructUtil.merge` is a **deep, index-wise** merge (nested lists merge by index). |
 | `["a"] ["a"] eq` to compare lists | `["a"] ["a"] deq` (structural) or `Assert.equal` | `eq` is **identity**; use `deq` for structural equality of Maps/Lists. |
-| `def keys …` / `def node …` | pick a non-reserved name (`ks`, `nd`) | `node keys vals has scan canon eq` are built-in; `aql check` flags the collision with a source position. |
+| `def keys …` / `def node …` | pick a non-reserved name (`ks`, `nd`) | `node keys vals has scan canon eq` are built-in; `boru check` flags the collision with a source position. |
 | `within`/`match` on a radix/tst/burst | pull `keys`/`entries`, rebuild a `TrieSet`/`TrieMap` | those queries exist on the standard trie only. |
 | expect a string `decode` | round-trip via `keys`+`from-keys` / `entries`+`from-entries` | there is no string decode. |
 

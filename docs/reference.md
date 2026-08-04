@@ -21,7 +21,7 @@ engine:
 
 Import the variant you want:
 
-```aql
+```boru
 import "./trie.aql"
 import "./radix.aql"
 import "./tst.aql"
@@ -42,7 +42,7 @@ draws from the stack — so a terminator is usually unnecessary
 case that needs disambiguation is a bare, type-compatible literal immediately
 following a call with nothing between; resolve it with parens, a trailing
 `end`, or the `/s` modifier, which forces stack-arg resolution. This is general
-AQL forward-precedence behaviour, not specific to this library.
+boru forward-precedence behaviour, not specific to this library.
 
 The receiver (the trie) is the **last** argument in every Set/Map word's
 signature, so two call shapes bind: **forward** `Map.set value key t`
@@ -57,7 +57,7 @@ clarity; it is optional in the common case above.
 Tries are **persistent**. `add`, `set`, and `delete` return a *new* trie
 and leave the argument unchanged; bind the result:
 
-```aql
+```boru
 def t1 (t0 "a" TrieSet.add)   # t0 is still whatever it was
 ```
 
@@ -187,7 +187,7 @@ payloads the same way. To move data *across* variants, use
 | **Stack in** | the snapshot `String` |
 | **Returns** | a new trie equal to the encoded one |
 
-```aql
+```boru
 def snapshot (t TrieSet.encode)
 def t2 (snapshot TrieSet.decode)     # (t TrieSet.keys) == (t2 TrieSet.keys)
 ```
@@ -208,7 +208,7 @@ any of the four map namespaces.
 ### `Map.set`
 
 Insert or replace the value bound to `key`. Any value type is accepted,
-including Strings that happen to name AQL words (e.g. `"if"`, `"do"`).
+including Strings that happen to name boru words (e.g. `"if"`, `"do"`).
 
 | | |
 |--|--|
@@ -284,7 +284,7 @@ subtree as soon as its whole row exceeds `k`.
 | **Stack in** | the trie, the query (`String`), then the budget `k` (`Integer`) |
 | **Returns** | `List` of keys within distance `k`, sorted |
 
-```aql
+```boru
 def t (((TrieSet.make) "cat" TrieSet.add) "car" TrieSet.add)
 (t "cat" 1 TrieSet.within) print   # => ["car", "cat"]
 ```
@@ -301,7 +301,7 @@ a literal.
 | **Stack in** | the trie, then the pattern (`String`) |
 | **Returns** | `List` of matching keys, sorted |
 
-```aql
+```boru
 (t "ca?" TrieSet.match) print   # => ["car", "cat"]
 (t "c*"  TrieSet.match) print   # => ["car", "cat"]
 ```
