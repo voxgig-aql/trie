@@ -1,14 +1,14 @@
-# `aql check` on the trie library: a diagnostics report
+# `boru check` on the trie library: a diagnostics report
 
-A record of what the AQL static checker (`aql check`) reports when run over this
+A record of what the boru static checker (`boru check`) reports when run over this
 library, why those reports are **false positives** on this style of code, and
 what (if anything) would make the checker useful here. It backs the decision to
-wire `aql check` into CI as an **advisory, non-gating** step (`--soft` +
+wire `boru check` into CI as an **advisory, non-gating** step (`--soft` +
 `continue-on-error`) rather than a hard gate — see `.github/workflows/test.yml`.
 
-Verified against `aql` commit `db828ec`. Every example below is **standalone**:
-copy it into a `.aql` file, then compare `aql check --soft file.aql` (the
-diagnostic) against `aql file.aql` (it runs correctly).
+Verified against `boru` commit `db828ec`. Every example below is **standalone**:
+copy it into a `.aql` file, then compare `boru check --soft file.aql` (the
+diagnostic) against `boru file.aql` (it runs correctly).
 
 > **Re-run at `958c379b` (2026-06-11):** the checker gained real teeth —
 > `uncalled_function` now catches this library's single costliest historical
@@ -20,7 +20,7 @@ diagnostic) against `aql file.aql` (it runs correctly).
 
 ## TL;DR
 
-`aql check` is a structural type/usage checker. This library is deliberately
+`boru check` is a structural type/usage checker. This library is deliberately
 **generic and dynamically dispatched**: every node is a plain `Map` walked by
 stack-dispatched words, children live in untyped association lists pulled out
 with `get` (which returns `Any`), and the public surface is exported **by
@@ -35,7 +35,7 @@ correct. None of them corresponds to a real defect.
 | `tst.aql`   | 297 | 53  | 25 | 1 | 3 |
 | `burst.aql` | 197 | 82  | 27 | 7 | 1 |
 
-(Per-file counts from `aql check --soft <module>`. All four modules execute
+(Per-file counts from `boru check --soft <module>`. All four modules execute
 green across the full suite — see `.github/workflows/test.yml`.)
 
 Two of these are *correctness* errors in the checker itself (`fn_body_error`,
@@ -49,13 +49,13 @@ only for code more statically typed than this.
 
 ```bash
 # One module, advisory mode (always exits 0):
-aql check --soft trie.aql
+boru check --soft trie.aql
 
 # All four (note: analysis halts early — see "A caveat on multi-file runs"):
-aql check --soft trie.aql radix.aql tst.aql burst.aql
+boru check --soft trie.aql radix.aql tst.aql burst.aql
 
 # Confirm the same code RUNS correctly:
-aql test/trie_unit_test.aql      # ... "all green"
+boru test/trie_unit_test.aql      # ... "all green"
 ```
 
 `--soft` makes `check` exit `0` regardless of findings; without it, `check`
@@ -69,15 +69,15 @@ exits non-zero on any error-level diagnostic.
 
 **Standalone example** (`unused.aql`):
 
-```aql
+```boru
 def map-make fn [ [] [Map] [ {end: false} ] ]
 export "Demo" { make: map-make/r }
 ```
 
 ```
-$ aql check --soft unused.aql
+$ boru check --soft unused.aql
 check: 1:5: [warning] unused_def: def map-make is never used
-$ aql unused.aql        # defines Demo.make fine — no error
+$ boru unused.aql        # defines Demo.make fine — no error
 ```
 
 **Why it's a false positive.** `map-make` *is* used — it's the implementation of
@@ -100,7 +100,7 @@ words).
 
 **Standalone example** (`nosig.aql`):
 
-```aql
+```boru
 def kids-count fn [ [node:Map] [Integer] [
   0 (node "kids" get) [ var [[pair acc] acc 1 add ] ] fold
 ] ]
@@ -108,9 +108,9 @@ def kids-count fn [ [node:Map] [Integer] [
 ```
 
 ```
-$ aql check --soft nosig.aql
+$ boru check --soft nosig.aql
 check: 2:34: [error] no_signature: no matching signature for fold; assuming best-fit candidate for analysis
-$ aql nosig.aql
+$ boru nosig.aql
 2
 ```
 
@@ -126,7 +126,7 @@ also cascades onto the library's **own** recursive words — a self-call whose
 receiver came from `get` is `Any`, so the recursive call can't be matched
 either:
 
-```aql
+```boru
 def walk fn [ [key:String node:Map] [Any] [
   if ((key size) eq 0) [node] [
     def ch  (key slice 0 1)
@@ -155,16 +155,16 @@ assuming Any`.
 
 **Standalone example** (`missret.aql`):
 
-```aql
+```boru
 def grow fn [ [xs:List] [List] [ xs (xs size) push ] ]
 (grow [1 2]) print
 ```
 
 ```
-$ aql check --soft missret.aql
+$ boru check --soft missret.aql
 check: 1:41: [warning] missing_returns: word size has no declared Returns for matched signature; assuming Any
 check: 1:47: [warning] missing_returns: word push has no declared Returns for matched signature; assuming Any
-$ aql missret.aql
+$ boru missret.aql
 [1, 2, 2]
 ```
 
@@ -187,7 +187,7 @@ in the *standard library's* type annotations, not in this code.
 **Standalone example** (`fnbody.aql`) — this is the real `build-row` from
 `trie.aql` (Levenshtein DP row), self-contained:
 
-```aql
+```boru
 def min3 fn [ [a:Integer b:Integer c:Integer] [Integer] [
   def m (if (a lt b) [a] [b]) if (m lt c) [m] [c] ] ]
 
@@ -211,9 +211,9 @@ def build-row fn [
 ```
 
 ```
-$ aql check --soft fnbody.aql
+$ boru check --soft fnbody.aql
 check: [error] fn_body_error: fn body analysis error for build-row: [aql/syntax_error]: unmatched opening parenthesis
-$ aql fnbody.aql
+$ boru fnbody.aql
 [1, 1, 1]
 ```
 
@@ -259,7 +259,7 @@ under-counts. This is itself a reason not to gate on `check`: its output isn't
 even stable across invocation shapes.
 
 ```
-$ aql check --soft trie.aql radix.aql tst.aql burst.aql | tail -1
+$ boru check --soft trie.aql radix.aql tst.aql burst.aql | tail -1
 check: (empty stack)
 ```
 
@@ -278,17 +278,17 @@ Of the five categories:
 
 There is **no configuration** (short of `--soft`) that filters these down to a
 true-positive set, and no subset of the diagnostics that flags a real bug here.
-A hard `aql check` gate would block every green build on noise. That is why CI
+A hard `boru check` gate would block every green build on noise. That is why CI
 runs it `--soft` + `continue-on-error`: the log is there for a human to skim,
 and the **runnable test suites remain the real gate**.
 
-We re-run `aql check` on each aql bump; if a future release narrows `get`,
+We re-run `boru check` on each boru bump; if a future release narrows `get`,
 traces `/r` exports, ships `Returns` for core words, and fixes the body
 re-parser, the signal-to-noise may flip and the step can be promoted to a gate.
 
 ---
 
-## What would make `aql check` useful on this code
+## What would make `boru check` useful on this code
 
 In rough priority order:
 
@@ -309,7 +309,7 @@ In rough priority order:
 
 The library was upgraded (and refactored — children are now computed-key
 Maps enumerated via `StructUtil.items`, and every namespace gained
-`decode`) and `aql check --soft` was re-run per module on the new code.
+`decode`) and `boru check --soft` was re-run per module on the new code.
 (The standalone examples above were written at `db828ec`; to reproduce
 them today, rename their `node` bindings — `node` is now a reserved
 built-in word.)
@@ -327,7 +327,7 @@ library's DX report asked for. A wrong-arg-order namespace call is now
 flagged at the exact site, with the argument types it saw:
 
 ```
-$ aql check --soft wrongorder.aql
+$ boru check --soft wrongorder.aql
 check: [error] uncalled_function: call to 'map-get' matched no signature
        and was left on the stack as data (arguments: ProperString, Map)
 ```
@@ -337,7 +337,7 @@ silently-undispatched namespace word). The companion runtime check (an
 `[aql/uncalled_function]` raise at the end-of-run drain) covers leftover
 residue, though a *consumed* residue — the original symptom, where `print`
 interpolates the function value — is still runtime-silent; the checker is
-the tool that sees it. Reason enough to keep running `aql check` on every
+the tool that sees it. Reason enough to keep running `boru check` on every
 change even though it cannot gate.
 
 **What's unchanged.** All five false-positive classes from the original
@@ -413,7 +413,7 @@ same volume, `uncalled_function` intact. The checker output did not move.
 
 What *did* change is that the false positives now have **teeth they didn't
 have before**. This commit adds the `--force-compile` flag (require the
-bytecode VM, abort otherwise), and `--force-compile` **runs `aql check`
+bytecode VM, abort otherwise), and `--force-compile` **runs `boru check`
 first and refuses on any diagnostic** — `error: force-compile: check
 diagnostics`. So the ~900 documented false positives, until now a purely
 advisory CI annoyance, are what stop `--force-compile` from reaching the

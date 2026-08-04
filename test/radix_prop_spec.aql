@@ -8,7 +8,7 @@
 #   aql test/radix_prop_spec.aql
 
 
-import "aql:test"
+import "boru:test"
 import "./radix.aql"
 import "./trie.aql"
 

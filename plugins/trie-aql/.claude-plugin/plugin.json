@@ -2,9 +2,9 @@
   "name": "trie-aql",
   "description": "Agent guidance for calling the trie utilities library correctly from AQL: the forward-dispatch calling convention, the four interchangeable variants, persistent/immutable semantics, verified copy-paste idioms, and fixes for common mistakes.",
   "version": "0.1.0",
-  "author": { "name": "voxgig-aql" },
-  "homepage": "https://github.com/voxgig-aql/trie",
-  "repository": "https://github.com/voxgig-aql/trie",
+  "author": { "name": "voxgig-boru" },
+  "homepage": "https://github.com/voxgig-boru/trie",
+  "repository": "https://github.com/voxgig-boru/trie",
   "license": "MIT",
   "keywords": ["aql", "trie", "skill", "agent"]
 }

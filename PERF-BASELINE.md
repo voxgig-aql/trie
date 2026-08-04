@@ -1,12 +1,12 @@
-# Performance baseline — `voxgig-aql/trie`
+# Performance baseline — `voxgig-boru/trie`
 
 **Date:** 2026-07-11
-**aql:** `main` (built from source; see `AQL-MAIN-VERIFICATION.md` for the exact
+**boru:** `main` (built from source; see `boru-MAIN-VERIFICATION.md` for the exact
 commit and build method)
 **Harness:** `bench/trie_bench.aql` + `bench/run.sh` (reproducible; no RNG)
 
 This is a **wall-clock baseline** for the trie library so future changes — in
-this repo or upstream `aql` — can be measured against a fixed workload. Numbers
+this repo or upstream `boru` — can be measured against a fixed workload. Numbers
 are single-run wall time on the session's remote container (shared CPU), so
 treat them as *ratios and orders of magnitude*, not absolute constants; re-run
 `bench/run.sh` on the target host for local figures.
@@ -25,9 +25,9 @@ treat them as *ratios and orders of magnitude*, not absolute constants; re-run
 
 ## Results — interpreter vs bytecode compiler
 
-Run with `SIZES="500 1000 2000" bench/run.sh`. The compiler (`aql --compile`)
+Run with `SIZES="500 1000 2000" bench/run.sh`. The compiler (`boru --compile`)
 **soundly falls back to the interpreter for the recursive trie module fns that
-still refuse** (see `AQL-MAIN-VERIFICATION.md` §compile), yet the compiled
+still refuse** (see `boru-MAIN-VERIFICATION.md` §compile), yet the compiled
 top-level driver loops (the build `fold` and the membership/prefix `each`
 sweeps) still deliver a solid speedup:
 
@@ -37,18 +37,18 @@ sweeps) still deliver a solid speedup:
 | 1000 | 14.06 s | 3.78 s | 3.72× |
 | 2000 | 34.88 s | 11.86 s | 2.94× |
 
-(single clean run, `aql` @ `6185620`; re-run `bench/run.sh` for local figures)
+(single clean run, `boru` @ `6185620`; re-run `bench/run.sh` for local figures)
 
 Scaling is roughly linear in `N` (slightly superlinear because `with-prefix`
 collects a growing key set). The **~3× compiled speedup comes entirely from the
 driver loops**; closing the remaining `--force-compile` refusals in the
 recursive module fns (the `body result of unknown provenance` / dynamic-receiver
-dispatch frontier catalogued in `AQL-MAIN-VERIFICATION.md`) is the path to
+dispatch frontier catalogued in `boru-MAIN-VERIFICATION.md`) is the path to
 compiling the trie walks themselves and widening this margin.
 
 ## Per-suite interpreter runtimes (latest `main`)
 
-Reference cost of the CI suites under the interpreter (`aql <suite>.aql`):
+Reference cost of the CI suites under the interpreter (`boru <suite>.aql`):
 
 | Suite | ~time |
 |---|---|
@@ -71,7 +71,7 @@ suites are all under ~2 s except the multi-variant `trie_smoke_test`.
 ## Reproducing
 
 ```bash
-# from the repo root, with `aql` on PATH
+# from the repo root, with `boru` on PATH
 bench/run.sh                       # SIZES defaults to "500 1000 2000"
 SIZES="1000" bench/run.sh          # single size
 ```

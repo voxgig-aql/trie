@@ -23,7 +23,7 @@
 #   aql test/trie_unit_spec.aql
 
 
-import "aql:test"
+import "boru:test"
 import "./trie.aql"
 
 

@@ -12,7 +12,7 @@
     "absent": "get returns none, has returns false for absent keys (never an error)",
     "import_resolution": "relative to the working directory, not the importing file",
     "external_deps": [
-      "aql:struct-util (standard module shipped with the interpreter)"
+      "boru:struct-util (standard module shipped with the interpreter)"
     ],
     "codec": "decode is the inverse of encode (raises a catchable error on a payload of the wrong kind); data-level round-trips via keys+from-keys or entries+from-entries also work",
     "call_placeholder": "in word_specs, `Set`/`Map` stands for the concrete namespace name (e.g. RadixSet.add, TstMap.get)"

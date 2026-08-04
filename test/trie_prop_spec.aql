@@ -1,11 +1,11 @@
 # Property-based tests for the standard trie — DECLARATIVE SPEC FORMAT.
 #
-# This file exercises aql:test's declarative property surface: `Test.prop`
+# This file exercises boru:test's declarative property surface: `Test.prop`
 # builds a PropertySpec as data, and `Test.run-property` runs it at the
 # default 100 iterations. The sibling file `test/trie_prop_test.aql` covers the
 # same ideas through the imperative `Test.check-prop` driver.
 #
-# GEN-BODY runs with `r` (a seeded aql:rand instance) in scope and must leave
+# GEN-BODY runs with `r` (a seeded boru:rand instance) in scope and must leave
 # exactly one value on the stack. PROPERTY-BODY takes that value and must
 # return a Boolean.
 #
@@ -13,7 +13,7 @@
 #   aql test/trie_prop_spec.aql
 
 
-import "aql:test"
+import "boru:test"
 import "./trie.aql"
 
 

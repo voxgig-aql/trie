@@ -1,25 +1,25 @@
 # Close the `--force-compile` coverage gap for client libraries
 
-> **Provenance.** Surfaced by the `aql`-main verification track for this library
-> (`AQL-MAIN-VERIFICATION.md`, §6–§8). As of `aql main @ 407fedad` the
-> interpreter and `aql check` are fully green (0 errors) on all 11 suites and
+> **Provenance.** Surfaced by the `boru`-main verification track for this library
+> (`boru-MAIN-VERIFICATION.md`, §6–§8). As of `boru main @ 407fedad` the
+> interpreter and `boru check` are fully green (0 errors) on all 11 suites and
 > all 4 modules; the **strict bytecode path (`--force-compile`)** is the only
 > remaining non-green path. This is a prompt/brief to direct work **in the
-> `aql-lang/aql` repo** (not this library) to close that gap.
+> `boru-lang/boru` repo** (not this library) to close that gap.
 
 ---
 
 ## Goal (north star)
 
-Make **`aql --force-compile`** (the strict bytecode path — require the VM,
+Make **`boru --force-compile`** (the strict bytecode path — require the VM,
 refuse rather than fall back) succeed on **every test suite of the three
-reference client libraries** — `voxgig-aql/trie` (11 suites),
-`voxgig-aql/decision`, `voxgig-aql/bloom-filter` — with **zero refusals**,
+reference client libraries** — `voxgig-boru/trie` (11 suites),
+`voxgig-boru/decision`, `voxgig-boru/bloom-filter` — with **zero refusals**,
 while preserving every existing soundness invariant. "Done" = each suite runs
 to completion on the VM and its residual is byte-identical to the interpreter's.
 
 This is purely a **compiler-coverage** effort. The checker is already clean
-(every suite and module `aql check`s 0 errors as of `main @ 407fedad`); the
+(every suite and module `boru check`s 0 errors as of `main @ 407fedad`); the
 interpreter and `--compile` (best-effort, with fallback) are fully green. Only
 the strict path refuses.
 
@@ -37,7 +37,7 @@ the strict path refuses.
 - `design/CLIENT-VERIFICATION-MAIN-2026-06-24.md` — the current ledger of
   exactly which suites refuse and why (the table this work must turn all-green).
 - Code: `eng/go/{emit,lower,vm,bytecode}.go`; the strict-mode entry
-  `lang.(*AQL).RunCompiledStrict`; and the error-severity gate in
+  `lang.(*boru).RunCompiledStrict`; and the error-severity gate in
   `lang/go/aql.go` (the loop that returns `"check diagnostics"`).
 
 ## The refusal classes to close (each is currently observed)
@@ -70,7 +70,7 @@ Build that once; the three surface words should collapse into it.
 
 ### Project B — the dynamic-help / `check diagnostics` artifact (separate, higher-risk)
 
-4. **`check diagnostics`** on suites that themselves `aql check` **0 errors**
+4. **`check diagnostics`** on suites that themselves `boru check` **0 errors**
    (e.g. `radix_unit_test`, `trie_smoke_test`, `decision_smoke`). This is
    **not** a real check error. The compile path's internal check pass runs the
    **dynamic-help example generator** — each registered `fn` body is evaluated
@@ -100,16 +100,16 @@ Build that once; the three surface words should collapse into it.
   (`Array`/`Object`/`Store`) into `isInertConst`; keep
   `bytecode_constbake_test.go` green.
 - **No checker regression:** all client suites and modules must still
-  `aql check` 0 errors.
+  `boru check` 0 errors.
 - **Keep the corpus honest:** any change to the emitted diagnostic set must
   come with a deliberate, reviewed corpus re-baseline — not a silent delta.
 
 ## Acceptance criteria
 
 1. For each of the three client repos, from the repo root:
-   `aql --force-compile test/<suite>.aql` exits 0 for **every** suite, with
+   `boru --force-compile test/<suite>.aql` exits 0 for **every** suite, with
    **no** `force-compile:` refusal line.
-2. `aql --force-compile X` output is byte-identical to `aql X` for every suite
+2. `boru --force-compile X` output is byte-identical to `boru X` for every suite
    (extend the harness to diff them).
 3. Upstream gates green: `make verify-bytecode` (fmt/vet/lint +
    `compiled_differential_test.go` + `compiled_property_test.go` + `-race` +
@@ -136,14 +136,14 @@ Build that once; the three surface words should collapse into it.
 ## Reproduction harness
 
 ```bash
-REF=$(curl -fsSL https://api.github.com/repos/aql-lang/aql/commits/main | jq -r .sha)
-mkdir -p /tmp/aql && curl -fsSL "https://codeload.github.com/aql-lang/aql/tar.gz/$REF" \
-  | tar -xz -C /tmp/aql --strip-components=1
-( cd /tmp/aql/cmd/go && GOFLAGS=-mod=mod go build -o /tmp/aql-bin ./aql )
+REF=$(curl -fsSL https://api.github.com/repos/boru-lang/boru/commits/main | jq -r .sha)
+mkdir -p /tmp/aql && curl -fsSL "https://codeload.github.com/boru-lang/boru/tar.gz/$REF" \
+  | tar -xz -C /tmp/boru --strip-components=1
+( cd /tmp/aql/cmd/go && GOFLAGS=-mod=mod go build -o /tmp/aql-bin ./boru )
 
 for repo in trie decision bloom-filter; do
   src=/tmp/$repo; mkdir -p "$src"
-  curl -fsSL "https://codeload.github.com/voxgig-aql/$repo/tar.gz/main" \
+  curl -fsSL "https://codeload.github.com/voxgig-boru/$repo/tar.gz/main" \
     | tar -xz -C "$src" --strip-components=1
   ( cd "$src" && for f in test/*.aql; do
       /tmp/aql-bin "$f" >/tmp/i.out 2>&1                 # interpreter (reference)

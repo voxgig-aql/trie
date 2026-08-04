@@ -1,8 +1,8 @@
 name: tests
 
-# The trie utilities are written in AQL, so CI builds the `aql` interpreter
-# from source before running anything. AQL has no tagged release yet and has
-# shipped breaking changes between commits, so we pin AQL_REF to the exact
+# The trie utilities are written in boru, so CI builds the `boru` interpreter
+# from source before running anything. boru has no tagged release yet and has
+# shipped breaking changes between commits, so we pin BORU_REF to the exact
 # commit this library is verified against. Bump it (and re-run the suites
 # locally) when adopting a newer aql.
 on:
@@ -25,88 +25,88 @@ jobs:
         with:
           go-version: '1.24'
 
-      # The compiled binary only depends on AQL_REF (and the OS), so a hit
+      # The compiled binary only depends on BORU_REF (and the OS), so a hit
       # here lets us skip the clone + build entirely.
-      - name: Resolve aql main HEAD
-        id: aqlref
-        run: echo "sha=$(git ls-remote https://github.com/aql-lang/aql.git main | cut -f1)" >> "$GITHUB_OUTPUT"
+      - name: Resolve boru main HEAD
+        id: boruref
+        run: echo "sha=$(git ls-remote https://github.com/boru-lang/boru.git main | cut -f1)" >> "$GITHUB_OUTPUT"
 
-      - name: Cache aql binary
-        id: cache-aql
+      - name: Cache boru binary
+        id: cache-boru
         uses: actions/cache@v4
         with:
-          path: ~/.local/bin/aql
-          key: aql-${{ steps.aqlref.outputs.sha }}-${{ runner.os }}
+          path: ~/.local/bin/boru
+          key: boru-${{ steps.boruref.outputs.sha }}-${{ runner.os }}
 
-      - name: Check out aql source
-        if: steps.cache-aql.outputs.cache-hit != 'true'
+      - name: Check out boru source
+        if: steps.cache-boru.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
         with:
-          repository: aql-lang/aql
-          ref: ${{ steps.aqlref.outputs.sha }}
-          path: aql-src
+          repository: boru-lang/boru
+          ref: ${{ steps.boruref.outputs.sha }}
+          path: boru-src
 
       # The documented `go install …/cmd/go/aql@latest` cannot work while
       # cmd/go/go.mod carries replace directives, so we build from the clone
       # with -mod=mod instead.
-      - name: Build aql
-        if: steps.cache-aql.outputs.cache-hit != 'true'
+      - name: Build boru
+        if: steps.cache-boru.outputs.cache-hit != 'true'
         run: |
           mkdir -p "$HOME/.local/bin"
-          cd aql-src/cmd/go
+          cd boru-src/cmd/go
           GOWORK=off GOFLAGS=-mod=mod go build \
-            -ldflags "-X github.com/aql-lang/aql/cmd/go.Version=${{ steps.aqlref.outputs.sha }}" \
-            -o "$HOME/.local/bin/aql" ./aql
+            -ldflags "-X github.com/boru-lang/boru/cmd/go.Version=${{ steps.boruref.outputs.sha }}" \
+            -o "$HOME/.local/bin/boru" ./boru
 
-      - name: Add aql to PATH
+      - name: Add boru to PATH
         run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      - name: Report aql version
-        run: aql -version
+      - name: Report boru version
+        run: boru -version
 
       # Each suite ends with `0 test.fail-count end assert.equal`, so a
-      # failure makes aql exit non-zero and fails the step.
+      # failure makes boru exit non-zero and fails the step.
       #
       # INTERPRETER IS A HARD GATE for every suite — the supported execution
       # path, and always green.
       - name: Unit tests — interpreter (HARD GATE)
         run: |
           for f in trie radix tst burst; do
-            echo "::group::aql test/${f}_unit_test.aql"
-            aql "test/${f}_unit_test.aql"
+            echo "::group::boru test/${f}_unit_test.aql"
+            boru "test/${f}_unit_test.aql"
             echo "::endgroup::"
           done
       - name: Unit spec — standard trie (interpreter)
-        run: aql test/trie_unit_spec.aql
+        run: boru test/trie_unit_spec.aql
 
       - name: Property tests — standard trie (spec)
-        run: aql test/trie_prop_spec.aql
+        run: boru test/trie_prop_spec.aql
       - name: Property tests — standard trie (direct)
-        run: aql test/trie_prop_test.aql
+        run: boru test/trie_prop_test.aql
       - name: Property tests — radix tree
-        run: aql test/radix_prop_spec.aql
+        run: boru test/radix_prop_spec.aql
       - name: Property tests — ternary search tree
-        run: aql test/tst_prop_spec.aql
+        run: boru test/tst_prop_spec.aql
       - name: Property tests — burst trie
-        run: aql test/burst_prop_spec.aql
+        run: boru test/burst_prop_spec.aql
 
       - name: Smoke demo
-        run: aql test/trie_smoke_test.aql
+        run: boru test/trie_smoke_test.aql
 
-      # Static check — HARD GATE. `aql check` exits non-zero on any
+      # Static check — HARD GATE. `boru check` exits non-zero on any
       # error-level diagnostic. The upstream checker-precision work (gradual
       # `Any` carriers, `/r` reference-export use-tracing, the `do{}`-param and
       # dynamic-`set` fixes) landed, so every suite AND every module now checks
       # 0 errors — what used to be ~150–300 false positives per module. Gating
       # here guards against a regression on either side. (`unused_def` and
       # similar live at warning level and do not fail the step.)
-      # Verified clean on the pinned ref; see AQL-MAIN-VERIFICATION.md §8 and
+      # Verified clean on the pinned ref; see boru-MAIN-VERIFICATION.md §8 and
       # upstream design/CLIENT-VERIFICATION-MAIN-2026-06-24.md.
       - name: Static check — suites + modules (HARD GATE, 0 errors)
         run: |
           for f in test/*.aql trie.aql radix.aql tst.aql burst.aql; do
-            echo "::group::aql check $f"
-            aql check "$f"
+            echo "::group::boru check $f"
+            boru check "$f"
             echo "::endgroup::"
           done
 
@@ -124,15 +124,15 @@ jobs:
         continue-on-error: true
         run: |
           for f in test/*.aql; do
-            echo "::group::aql --force-compile $f"
-            aql --force-compile "$f" || echo "::warning::--force-compile refused for $f (deferred upstream)"
+            echo "::group::boru --force-compile $f"
+            boru --force-compile "$f" || echo "::warning::--force-compile refused for $f (deferred upstream)"
             echo "::endgroup::"
           done
 
   # Lightweight guard for the agent-skill packaging and the pinned-ref single
-  # source of truth (no aql needed). The plugin must bundle its own copy of the
+  # source of truth (no boru needed). The plugin must bundle its own copy of the
   # skill — plugins can't point at an external .claude/skills dir — so two
-  # copies exist and can drift; and the aql commit is pinned in several files
+  # copies exist and can drift; and the boru commit is pinned in several files
   # that must agree.
   consistency:
     runs-on: ubuntu-latest

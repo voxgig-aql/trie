@@ -1,4 +1,4 @@
-# Burst-trie tests using aql:test's imperative API.
+# Burst-trie tests using boru:test's imperative API.
 #
 # Runs identically under the interpreter, `aql check`, and the bytecode
 # compiler:
@@ -7,7 +7,7 @@
 #   aql --force-compile test/burst_unit_test.aql
 
 
-import "aql:test"
+import "boru:test"
 import "./burst.aql"
 
 

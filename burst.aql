@@ -42,9 +42,9 @@
 # separate a call from a following bare literal.
 #
 # Imported via `import "./burst.aql"`. The only dependency is the standard
-# `aql:struct-util` module (map enumeration + jsonic parsing).
+# `boru:struct-util` module (map enumeration + jsonic parsing).
 
-import "aql:struct-util"
+import "boru:struct-util"
 
 
 # --- constants ------------------------------------------------------

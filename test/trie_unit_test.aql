@@ -1,4 +1,4 @@
-# Standard-trie tests using aql:test's imperative API.
+# Standard-trie tests using boru:test's imperative API.
 #
 # Runs identically under the interpreter, `aql check`, and the bytecode
 # compiler:
@@ -7,7 +7,7 @@
 #   aql --force-compile test/trie_unit_test.aql # bytecode VM
 
 
-import "aql:test"
+import "boru:test"
 import "./trie.aql"
 
 

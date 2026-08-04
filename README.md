@@ -1,12 +1,12 @@
 # trie
 
 A small, dependency-light set of **trie (prefix tree) utilities**
-implemented in [AQL](https://github.com/aql-lang/aql). One import gives
+implemented in [boru](https://github.com/boru-lang/boru). One import gives
 you fast prefix search, autocomplete, and longest-prefix matching over
 String keys — as either a **set** of keys or a **map** from keys to
 values — in four classic flavours.
 
-```aql
+```boru
 import "./trie.aql"
 
 def t (((TrieSet.make) "cat" TrieSet.add) "car" TrieSet.add)
@@ -60,7 +60,7 @@ The standard trie additionally offers two **advanced queries**:
 `t pattern TrieSet.match` (wildcard search, `?` = one char, `*` = any run).
 
 Tries are **persistent (immutable)**: every `add`/`set`/`delete` returns
-a *new* trie and leaves the input untouched. Calls use AQL's
+a *new* trie and leaves the input untouched. Calls use boru's
 forward-dispatch — arguments resolve at the next word or paren, so an
 explicit `end` is rarely needed. Full details and the calling convention
 are in the [Reference](docs/reference.md).
@@ -83,7 +83,7 @@ Jump to the [Reference](docs/reference.md).
 ## For AI coding agents
 
 If an agent will call this library, point it at **[AGENTS.md](AGENTS.md)** —
-the AQL calling convention, the four variants, verified idioms, and the common
+the boru calling convention, the four variants, verified idioms, and the common
 mistakes to avoid. A machine-readable API manifest is in
 [`api.json`](api.json); Claude Code also auto-loads `AGENTS.md` via
 [`CLAUDE.md`](CLAUDE.md).
@@ -98,8 +98,8 @@ install the bundled skill either way:
 - **Install the plugin** — this repo is also a plugin marketplace:
 
   ```
-  /plugin marketplace add voxgig-aql/trie
-  /plugin install trie-aql@voxgig-aql
+  /plugin marketplace add voxgig-boru/trie
+  /plugin install trie-aql@voxgig-boru
   ```
 
 ## Project layout
@@ -115,23 +115,23 @@ test/<variant>_prop_spec.aql   property-based tests — declarative spec
 test/trie_prop_test.aql        property-based tests — direct (Test.check-prop)
 test/trie_smoke_test.aql       smoke demo across all four variants
 docs/                          Diátaxis documentation (above)
-dx-report.md                   developer-experience notes on building this in AQL
+dx-report.md                   developer-experience notes on building this in boru
 ```
 
 ## Running it
 
-Build the `aql` interpreter, then run the demo or any test — see
+Build the `boru` interpreter, then run the demo or any test — see
 [How-to → Install and run](docs/how-to.md#install-and-run-aql) and
 [Run the tests](docs/how-to.md#run-the-tests):
 
 ```bash
-aql test/trie_smoke_test.aql   # smoke demo across all variants
-aql test/trie_unit_test.aql    # unit tests (standard trie; one suite per variant)
-aql test/trie_prop_spec.aql    # property tests (standard trie)
+boru test/trie_smoke_test.aql   # smoke demo across all variants
+boru test/trie_unit_test.aql    # unit tests (standard trie; one suite per variant)
+boru test/trie_prop_spec.aql    # property tests (standard trie)
 ```
 
 A GitHub Actions workflow
-([`.github/workflows/test.yml`](.github/workflows/test.yml)) builds aql from a
+([`.github/workflows/test.yml`](.github/workflows/test.yml)) builds boru from a
 pinned commit and runs every suite — plus a `consistency` job (agent-skill
 drift, JSON manifests, and a pinned-ref guard) — on each push and pull request.
 
